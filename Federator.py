@@ -24,8 +24,8 @@ class Federator:
         print('accepted connection from', addr, "\n")
         conn.setblocking(False)
         data = types.SimpleNamespace(addr=addr, inb=b'', outb=b'')
-        events = selectors.EVENT_READ | selectors.EVENT_WRITE
-        self.sel.register(conn, events, data=data)
+        event_actions = selectors.EVENT_READ | selectors.EVENT_WRITE
+        self.sel.register(conn, event_actions, data=data)
 
     def service_connection(self, key, mask):
         sock = key.fileobj
@@ -56,7 +56,7 @@ if __name__ == "__main__":
                 print(fed.reporters)
             for key, mask in events:
                 if key.data is None:
-                    fed.accept_wrapper(key.fileobj)
+                    fed.accept_wrapper()
                     fed.reporters.append(1)
                 else:
                     fed.service_connection(key, mask)
