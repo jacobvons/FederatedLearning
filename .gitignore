@@ -11,6 +11,9 @@ __pycache__/
 # MacOS files
 .DS_Store
 
+# Numpy
+*.npy
+
 # Distribution / packaging
 .Python
 env/
