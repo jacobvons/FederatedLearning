@@ -51,7 +51,7 @@ def accept_wrapper(sock, sel):
     conn, addr = sock.accept()
     print('accepted connection from', addr, "\n")
     conn.setblocking(False)
-    data = types.SimpleNamespace(addr=addr, inb=b'', outb=b'', name="")
+    data = types.SimpleNamespace(addr=addr, inb=b'', outb=b'', id="")
     event_actions = selectors.EVENT_READ | selectors.EVENT_WRITE
     sel.register(conn, event_actions, data=data)
 
@@ -62,13 +62,14 @@ if __name__ == "__main__":
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind((host, port))
     sock.listen()
+    print("Listening on", host+":"+str(port))
     sock.setblocking(False)
     sel.register(sock, selectors.EVENT_READ, data=None)
     while True:
         events = sel.select(timeout=None)
         for key, mask in events:
             if key.data is None:
-                accept_wrapper(sock, sel)
+                accept_wrapper(key.fileobj, sel)
             else:  # Service this connection
                 sock = key.fileobj
                 data = key.data
@@ -77,21 +78,24 @@ if __name__ == "__main__":
                         recv_header = sock.recv(1024)  # Ready to read the header.
                         msg = pickle.loads(recv_header)
                         msg_size, client_id = msg[:13].strip("*"), msg[13:].strip("*")
-                        print(msg_size)
+                        print("Preparing to receive", msg_size, "bytes from client", client_id)
                         sock.setblocking(True)
                         sock.send(b"OK")
                         recv_data = sock.recv(int(msg_size))
 
                         if recv_data:
                             data.outb += recv_data
+                            data.id = client_id
 
                     except Exception as e:
                         print(e)
                         print('closing connection to', data.addr)
-                        sel.unregister(sock)
-                        sock.close()
+                        # sel.unregister(sock)
+                        # sock.close()
+
                 if mask & selectors.EVENT_WRITE:
                     if data.outb:
-                        print('echoing', repr(data.outb), 'to', data.addr)
+                        print('echoing data to', data.addr, "(client", data.id+")")
                         sent = sock.send(data.outb)  # Should be ready to write
                         data.outb = data.outb[sent:]
+                        sel.unregister(sock)
