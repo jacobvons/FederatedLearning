@@ -6,7 +6,7 @@ class Message:
 
 
 if __name__ == "__main__":
-    msg1 = np.random.rand(500, 1)
+    msg1 = np.random.rand(50, 1)
     np.save("./data1.npy", msg1)
-    msg2 = np.random.rand(500, 1)
+    msg2 = np.random.rand(50, 1)
     np.save("./data2.npy", msg2)

@@ -42,24 +42,31 @@ class Client:
         msg = self.dumps(message)
         return str(len(msg)).ljust(12, "*") + str(self.id).rjust(3, "*")
 
+    def update_communication(self):
+        msg = self.dumps(self.raw_message)
+        header = self.gen_header(msg)
+        header = self.dumps(header)
+        self.sock.connect((self.host, self.port))
+        self.sock.setblocking(True)
+        self.send(header)
+        status, client_num = (self.recv(10).decode("utf-8")).split("*")
+        client_num = self.dumps(client_num)
+        if status == "OK":
+            print("Received OK. Sending model parameters.")
+            self.send(msg)
+            print("Sent. Waiting for update...")
+            data, length = self.loads(self.recv(len(msg)+len(client_num)))
+            # print(data/int(length))
+            self.raw_message = data
+
 
 if __name__ == "__main__":
     # Initialisation stage
     host, port, path, client_id = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
-
     msg = np.load(path)
+
     client = Client(client_id, host, port, msg)
-    msg = client.dumps(msg)
-    header = client.gen_header(msg)
-    header = client.dumps(header)
-    client.sock.connect((client.host, client.port))
-    client.sock.setblocking(True)
-    client.send(header)
-    status, client_num = (client.recv(10).decode("utf-8")).split("*")  # Receive status and client number
-    client_num = client.dumps(client_num)
-    if status == "OK":
-        print("Received OK. Sending model parameters.")
-        client.send(msg)
-        print("Sent. Waiting for update.")
-        data, length = client.loads(client.recv(len(msg)+len(client_num)))
-        print(data/int(length))
+    # client.raw_message = client.xcrypt_2d(client.pk.encrypt)
+    client.update_communication()
+    # client.raw_message = client.xcrypt_2d(client.sk.decrypt)
+    print(client.raw_message)
