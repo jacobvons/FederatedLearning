@@ -21,6 +21,7 @@ class Federator:
         self.all_data = {}
         self.all_sockets = {}
         self.client_num = client_num
+        self.conns = {}  # This is a temporary test for IPs when first exchanging dummy data
 
     def accept_wrapper(self, sock):
         conn, addr = sock.accept()
@@ -30,14 +31,32 @@ class Federator:
         event_actions = selectors.EVENT_READ | selectors.EVENT_WRITE
         self.sel.register(conn, event_actions, data=data)
 
+    def received_dummy(self):
+        self.sock.setblocking(True)
+        conn, addr = self.sock.accept()
+        conn.setblocking(True)
+        dummy = conn.recv(5).decode("utf-8")
+        if dummy == "dummy":
+            self.conns[addr] = conn
+            return True
+        return False
+
 
 if __name__ == "__main__":
     host, port, client_num = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
     fed = Federator(host, port, client_num)
 
+    # Loop until all clients are reporting
+    while len(fed.conns) < fed.client_num:
+        fed.received_dummy()
+
+    # TODO: Send pk, init_msg, client_num, and init_model to Client connection
+
+    # Cycling stage-ish, because the meta-data exchange and connection establishment is also contained
+    # Have to extract those steps into the init stage.
     while True:
         # Aggregation when data from all clients are present
-        if len(fed.all_data) == client_num:
+        if len(fed.all_data) == fed.client_num:
             print("Aggregating...")
             # Turn bytes info of data.outb into actual arrays
             for data in fed.all_data.values():
@@ -73,8 +92,13 @@ if __name__ == "__main__":
                 data = key.data
                 if mask & selectors.EVENT_READ:
                     try:
+                        # Do public key receiving
+                        # Encrypt message
+                        # ...
+                        # Receive header
                         recv_header = sock.recv(1024)  # Ready to read the header.
                         msg = pickle.loads(recv_header)
+                        # Format header
                         msg_size, client_id = msg[:13].strip("*"), msg[13:].strip("*")
                         print("Preparing to receive", msg_size, "bytes from client", client_id+"...")
                         sock.setblocking(True)
