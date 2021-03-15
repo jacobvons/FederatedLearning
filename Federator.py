@@ -4,6 +4,10 @@ import types
 import sys
 import pickle
 import numpy as np
+from Message import Message
+from CommStage import CommStage
+import torch
+import sklearn
 
 
 class Federator:
@@ -16,12 +20,13 @@ class Federator:
         self.sock.bind((host, port))
         self.sock.listen()
         print('listening on', (host, port))
-        self.sock.setblocking(False)
+        self.sock.setblocking(True)
         self.sel.register(self.sock, selectors.EVENT_READ, data=None)
         self.all_data = {}
         self.all_sockets = {}
         self.client_num = client_num
-        self.conns = {}  # This is a temporary test for IPs when first exchanging dummy data
+        self.conns = set()
+        self.state = CommStage.CONN_ESTAB
 
     def accept_wrapper(self, sock):
         conn, addr = sock.accept()
@@ -31,90 +36,129 @@ class Federator:
         event_actions = selectors.EVENT_READ | selectors.EVENT_WRITE
         self.sel.register(conn, event_actions, data=data)
 
-    def received_dummy(self):
-        self.sock.setblocking(True)
-        conn, addr = self.sock.accept()
-        conn.setblocking(True)
-        dummy = conn.recv(5).decode("utf-8")
-        if dummy == "dummy":
-            self.conns[addr] = conn
-            return True
-        return False
+    # def received_dummy(self):
+    #     self.sock.setblocking(True)
+    #     conn, addr = self.sock.accept()
+    #     conn.setblocking(True)
+    #     dummy = conn.recv(5).decode("utf-8")
+    #     if dummy == "dummy":
+    #         self.conns[addr] = conn
+    #         return True
+    #     return False
 
 
 if __name__ == "__main__":
     host, port, client_num = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
     fed = Federator(host, port, client_num)
+    init_model = torch.load("init_model.pth")
+    init_model_message = pickle.dumps(Message(pickle.dumps(init_model), CommStage.PARAM_DIST))
 
-    # Loop until all clients are reporting
-    while len(fed.conns) < fed.client_num:
-        fed.received_dummy()
-
-    # TODO: Send pk, init_msg, client_num, and init_model to Client connection
-
-    # Cycling stage-ish, because the meta-data exchange and connection establishment is also contained
-    # Have to extract those steps into the init stage.
     while True:
-        # Aggregation when data from all clients are present
-        if len(fed.all_data) == fed.client_num:
-            print("Aggregating...")
-            # Turn bytes info of data.outb into actual arrays
-            for data in fed.all_data.values():
-                data.outb = pickle.loads(data.outb)
-            # Sum them and update all
-            new_info = sum([data.outb for data in fed.all_data.values()])
+        if len(fed.conns) == fed.client_num:
+            print("All clients connected.")
+            if fed.state == CommStage.CONN_ESTAB:
+                for sock in fed.conns:
+                    # Send message about the init_param, init_model, pk, and client_num
+                    sock.send(pickle.dumps(len(init_model_message)))
+                    if sock.recv(2).decode("utf-8") == "OK":
+                        sock.send(init_model_message)
+                fed.conns = set()
+                fed.state = CommStage.REPORT
+            else:
+                # TODO: Do aggregation and distribution
+                fed.conns = set()
+                pass
 
-            # Send out new parameters after aggregation
-            print("Distributing new model...")
-            for client_id, data in fed.all_data.items():
-                sock = fed.all_sockets[client_id]
-                print('Sending information to', data.addr, "(client", data.id + ")...")
-                data.outb = pickle.dumps((new_info, len(fed.all_data)))
-                sent = sock.send(data.outb)  # Should be ready to write
-                data.outb = data.outb[sent:]  # Clear data
-                fed.sel.unregister(sock)  # This socket finished its job
-            # Re-initialise data and socket information
-            fed.all_data = {}
-            fed.all_sockets = {}
-
-            print("New model distributed!")
-            print("Waiting for next communication round...")
-            print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-            print("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<", "\n")
-            continue
 
         events = fed.sel.select(timeout=None)
         for key, mask in events:
             if key.data is None:
-                fed.accept_wrapper(key.fileobj)  # key.fileobj is the sock for the event
-            else:  # Service this connection
+                fed.accept_wrapper(key.fileobj)
+            else:
                 sock = key.fileobj
                 data = key.data
                 if mask & selectors.EVENT_READ:
-                    try:
-                        # Do public key receiving
-                        # Encrypt message
-                        # ...
-                        # Receive header
-                        recv_header = sock.recv(1024)  # Ready to read the header.
-                        msg = pickle.loads(recv_header)
-                        # Format header
-                        msg_size, client_id = msg[:13].strip("*"), msg[13:].strip("*")
-                        print("Preparing to receive", msg_size, "bytes from client", client_id+"...")
-                        sock.setblocking(True)
-                        sock.send(b"OK*"+str(client_num).encode("utf-8"))
-                        print("OK")
-                        recv_data = sock.recv(int(msg_size))
+                    sock.setblocking(True)
+                    message = pickle.loads(sock.recv(1024))  # Of type Message
+                    if message.comm_stage == CommStage.CONN_ESTAB:
+                        fed.conns.add(sock)
+                        sock.send(b"OK")
+                        print("Waiting to get all clients")
+                    elif message.comm_stage == CommStage.REPORT:
+                        print("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+                        grad_header = message.message
+                        print(grad_header)
+                        sock.send(b"OK")
+                        grad = pickle.loads(sock.recv(int(grad_header)))
+                        print(grad)
 
-                        if recv_data:
-                            data.outb += recv_data
-                            data.id = client_id
-                            # Store data and socket information for later
-                            fed.all_data[client_id] = data
-                            fed.all_sockets[client_id] = sock
+                        bias_header = pickle.loads(sock.recv(1024)).message
+                        print(bias_header)
+                        sock.send(b"OK")
+                        bias = pickle.loads(sock.recv(int(bias_header)))
+                        print(bias)
+                        print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 
-                    except Exception as e:
-                        print(e)
-                        print('closing connection to', data.addr)
+                    elif message.comm_stage == CommStage.END:
                         fed.sel.unregister(sock)
-                        sock.close()
+                        print(f"connection to {sock} closed")
+
+        # # Aggregation when data from all clients are present
+        # if len(fed.all_data) == fed.client_num:
+        #     print("Aggregating...")
+        #     # Turn bytes info of data.outb into actual arrays
+        #     for data in fed.all_data.values():
+        #         data.outb = pickle.loads(data.outb)
+        #     # Sum them and update all
+        #     new_info = sum([data.outb for data in fed.all_data.values()])
+        #
+        #     # Send out new parameters after aggregation
+        #     print("Distributing new model...")
+        #     for client_id, data in fed.all_data.items():
+        #         sock = fed.all_sockets[client_id]
+        #         print('Sending information to', data.addr, "(client", data.id + ")...")
+        #         data.outb = pickle.dumps((new_info, len(fed.all_data)))
+        #         sent = sock.send(data.outb)  # Should be ready to write
+        #         data.outb = data.outb[sent:]  # Clear data
+        #         fed.sel.unregister(sock)  # This socket finished its job
+        #     # Re-initialise data and socket information
+        #     fed.all_data = {}
+        #     fed.all_sockets = {}
+        #
+        #     print("New model distributed!")
+        #     print("Waiting for next communication round...")
+        #     print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+        #     print("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<", "\n")
+        #     continue
+        #
+        # events = fed.sel.select(timeout=None)
+        # for key, mask in events:
+        #     if key.data is None:
+        #         fed.accept_wrapper(key.fileobj)  # key.fileobj is the socket for the event
+        #     else:  # Service this connection
+        #         sock = key.fileobj
+        #         data = key.data
+        #         if mask & selectors.EVENT_READ:
+        #             try:
+        #                 sock.setblocking(True)
+        #                 recv_header = sock.recv(1024)  # Ready to read the header.
+        #                 msg = pickle.loads(recv_header)
+        #                 # Format header
+        #                 msg_size, client_id = msg[:13].strip("*"), msg[13:].strip("*")
+        #                 print("Preparing to receive", msg_size, "bytes from client", client_id+"...")
+        #                 sock.send(b"OK*"+str(client_num).encode("utf-8"))
+        #                 print("OK")
+        #                 recv_data = sock.recv(int(msg_size))
+        #
+        #                 if recv_data:
+        #                     data.outb += recv_data
+        #                     data.id = client_id
+        #                     # Store data and socket information for later
+        #                     fed.all_data[client_id] = data
+        #                     fed.all_sockets[client_id] = sock
+        #
+        #             except Exception as e:
+        #                 print(e)
+        #                 print('closing connection to', data.addr)
+        #                 fed.sel.unregister(sock)
+        #                 sock.close()

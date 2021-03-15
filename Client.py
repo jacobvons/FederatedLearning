@@ -3,17 +3,19 @@ import pickle
 import sys
 import numpy as np
 import phe
+from Message import Message
+from CommStage import CommStage
+import torch
+import sklearn
 
 
 class Client:
 
-    def __init__(self, id, host, port, raw_message):
+    def __init__(self, id, host, port):
         self.id = id
         self.host = host
         self.port = port
-        self.raw_message = raw_message
         self.fed_pk = None
-        # self.pk, self.sk = phe.paillier.generate_paillier_keypair()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def connect(self):
@@ -36,11 +38,11 @@ class Client:
         status = self.sock.recv(9).decode("utf-8")  # Should receive a "CONNECTED" message from client
         return status == "CONNECTED"
 
-    def xcrypt_2d(self, xcrypt):
-        m, n = self.raw_message.shape
+    def xcrypt_2d(self, xcrypt, message):
+        m, n = message.shape
         output = []
         for i in range(0, m):
-            output.append(np.array(list(map(xcrypt, self.raw_message[i]))))
+            output.append(np.array(list(map(xcrypt, message[i]))))
         return np.array(output)
 
     def dumps(self, message):
@@ -79,16 +81,44 @@ if __name__ == "__main__":
     host, port, path, client_id = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
     msg = np.load(path)
 
-    client = Client(client_id, host, port, msg)
-    # Connect and send dummy to Federator to establish acknowledgement on Federator
-    if client.connect():
-        client.send_dummy()
-        client.wait_conn()
-        # TODO: Receive pk, init_msg, client_num, and init_model
-    # TODO: Wait until "START"
-    # TODO: Do actual ML training (test with easy functions first)
+    client = Client(client_id, host, port)
+    client.connect()
+    client.sock.setblocking(True)
+    init_msg = Message(b"OK", CommStage.CONN_ESTAB)
+    client.send(client.dumps(init_msg))
+    print(client.recv(2))
 
-    # client.raw_message = client.xcrypt_2d(client.pk.encrypt)
-    client.update_info()
-    # client.raw_message = client.xcrypt_2d(client.sk.decrypt)
-    print(client.raw_message)
+    header = client.recv(1024)
+    client.send(b"OK")
+    model_message = client.recv(int(client.loads(header)))
+    model = client.loads(client.loads(model_message).message)
+    torch.save(model, "client"+client_id+"_model.pth")
+    print("Received model message")
+
+    # TODO: Training
+    # Trained
+
+    # Report stage
+    for _ in range(3):
+        model = torch.load("client"+client_id+"_model.pth")
+        model_grad = client.dumps(model.weight)
+        model_bias = client.dumps(model.bias)
+        # Info about grad len, also initialises Report process on server
+        grad_header = Message(len(model_grad), CommStage.REPORT)
+        client.send(client.dumps(grad_header))
+        ok = client.recv(2)
+        if ok.decode("utf-8") == "OK":  # Federator already received the grad len
+            client.send(model_grad)
+            print("Sent grad")
+
+        bias_header = Message(len(model_bias), CommStage.REPORT)
+        client.send(client.dumps(bias_header))
+        ok = client.recv(2)
+        if ok.decode("utf-8") == "OK":
+            client.send(model_bias)
+            print("Sent bias")
+
+    # Send END message
+    end_msg = Message(b"", CommStage.END)
+    client.send(client.dumps(end_msg))
+    print("end")

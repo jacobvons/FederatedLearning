@@ -14,6 +14,9 @@ __pycache__/
 # Numpy
 *.npy
 
+# PyTorch
+*.pth
+
 # Distribution / packaging
 .Python
 env/
