@@ -16,7 +16,9 @@ class Client:
         self.host = host
         self.port = port
         self.fed_pk = None
+        self.pk, self.sk = phe.paillier.generate_paillier_keypair()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client_num = 0
 
     def connect(self):
         self.sock.connect((self.host, self.port))
@@ -58,52 +60,40 @@ class Client:
         msg = self.dumps(message)
         return str(len(msg)).ljust(12, "*") + str(self.id).rjust(3, "*")
 
-    def update_info(self):
-        msg = self.dumps(self.raw_message)
-        header = self.gen_header(msg)
-        header = self.dumps(header)
-        # self.sock.connect((self.host, self.port))
-        # self.sock.setblocking(True)
-        self.send(header)
-        status, client_num = (self.recv(10).decode("utf-8")).split("*")
-        client_num = self.dumps(client_num)
-        if status == "OK":
-            print("Received OK. Sending model parameters.")
-            self.send(msg)
-            print("Sent. Waiting for update...")
-            data, length = self.loads(self.recv(len(msg)+len(client_num)))
-            # print(data/int(length))
-            self.raw_message = data
-
 
 if __name__ == "__main__":
     # Initialisation stage
     host, port, path, client_id = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
     msg = np.load(path)
-
+    # Connection establishment stage
     client = Client(client_id, host, port)
     client.connect()
     client.sock.setblocking(True)
-    init_msg = Message(b"OK", CommStage.CONN_ESTAB)
+    init_msg = Message(client.pk, CommStage.CONN_ESTAB)
     client.send(client.dumps(init_msg))
-    print(client.recv(2))
+    client.client_num = int(client.recv(10).decode("utf-8"))
+    print(client.client_num, "clients in total.")
 
+    # Receive initial model stage
     header = client.recv(1024)
     client.send(b"OK")
     model_message = client.recv(int(client.loads(header)))
+    fed_pk_header = client.loads(client.recv(1024))
+    client.send(b"OK")
+    client.fed_pk = client.loads(client.recv(fed_pk_header))
     model = client.loads(client.loads(model_message).message)
     torch.save(model, "client"+client_id+"_model.pth")
     print("Received model message")
 
-    # TODO: Training
-    # Trained
-
-    # Report stage
-    for _ in range(3):
+    for _ in range(1):
         model = torch.load("client"+client_id+"_model.pth")
-        model_grad = client.dumps(model.weight)
-        model_bias = client.dumps(model.bias)
-        # Info about grad len, also initialises Report process on server
+        # Training stage
+        # TODO: Training
+        # model.fit(data)
+        model_grad = client.dumps(client.xcrypt_2d(client.fed_pk.encrypt, np.array(model.weight.data, dtype="float64")))
+        model_bias = client.dumps(np.array(list(map(client.fed_pk.encrypt, np.array(model.bias.data, dtype="float64")))))
+
+        # Report stage
         grad_header = Message(len(model_grad), CommStage.REPORT)
         client.send(client.dumps(grad_header))
         ok = client.recv(2)
@@ -118,7 +108,24 @@ if __name__ == "__main__":
             client.send(model_bias)
             print("Sent bias")
 
+        # Receive updated model info
+        grad_header = int(client.recv(10).decode("utf-8"))
+        client.send(b"OK")
+        new_grad = client.loads(client.recv(grad_header)).message  # of type np.array with encrypted numbers
+        bias_header = int(client.recv(10).decode("utf-8"))
+        client.send(b"OK")
+        new_bias = client.loads(client.recv(bias_header)).message  # of type np.array with encrypted numbers
+        # TODO: Do decryption here
+        new_grad = torch.from_numpy(client.xcrypt_2d(client.sk.decrypt, new_grad))
+        new_bias = torch.from_numpy(np.array(list(map(client.sk.decrypt, new_bias)), dtype="float64"))
+        # Update & save model
+        model.weight = torch.nn.Parameter(new_grad / client.client_num)
+        model.bias = torch.nn.Parameter(new_bias / client.client_num)
+        torch.save(model, "client"+client_id+"_model.pth")
+        print("New model saved.")
+
     # Send END message
     end_msg = Message(b"", CommStage.END)
     client.send(client.dumps(end_msg))
+    client.sock.close()
     print("end")
