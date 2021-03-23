@@ -9,6 +9,7 @@ from CommStage import CommStage
 import torch
 import sklearn
 import phe
+from XCrypt import xcrypt_2d
 
 
 class Federator:
@@ -32,6 +33,8 @@ class Federator:
         self.grads = {}
         self.biases = {}
         self.client_pks = {}
+        self.pc_nums = []
+        self.pcs = []
 
     def accept_wrapper(self, sock):
         conn, addr = sock.accept()
@@ -41,53 +44,67 @@ class Federator:
         event_actions = selectors.EVENT_READ | selectors.EVENT_WRITE
         self.sel.register(conn, event_actions, data=data)
 
-    def xcrypt_2d(self, xcrypt, message):
-        m, n = message.shape
-        output = []
-        for i in range(0, m):
-            output.append(np.array(list(map(xcrypt, message[i]))))
-        return np.array(output)
-
 
 if __name__ == "__main__":
     host, port, client_num = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
     fed = Federator(host, port, client_num)
     init_model = torch.load("init_model.pth")
     init_model_message = pickle.dumps(Message(pickle.dumps(init_model), CommStage.PARAM_DIST))
+    explain_ratio = 0.85
 
     while True:
         if len(fed.conns) == fed.client_num:
             if fed.state == CommStage.CONN_ESTAB:
                 print("All clients connected.")
                 for sock in fed.conns:
-                    # Send init_param, init_model
-                    sock.send(pickle.dumps(len(init_model_message)))
-                    if sock.recv(2).decode("utf-8") == "OK":
-                        sock.send(init_model_message)
                     # Send pk
                     sock.send(pickle.dumps(len(pickle.dumps(fed.pk))))
                     if sock.recv(2).decode("utf-8") == "OK":
                         sock.send(pickle.dumps(fed.pk))
+                print("Sent public key")
+                fed.conns = set()
+                fed.state = CommStage.PC_INFO_EXCHANGE
+            elif fed.state == CommStage.PC_INFO_EXCHANGE:
+                max_pc_num = max(fed.pc_nums)
+                for sock in fed.conns:
+                    sock.send(pickle.dumps(max_pc_num))
+                fed.conns = set()
+                fed.state = CommStage.PC_AGGREGATION
+            elif fed.state == CommStage.PC_AGGREGATION:
+                avg_pc = sum(fed.pcs) / len(fed.pcs)  # Could implement weighted pcs
+                for sock in fed.conns:
+                    # encrypted_pc = xcrypt_2d(fed.client_pks[sock].encrypt, avg_pc)
+                    encrypted_pc = avg_pc
+                    avg_pc_msg = pickle.dumps(Message(encrypted_pc, CommStage.PC_AGGREGATION))
+                    avg_pc_header = pickle.dumps(len(avg_pc_msg))
+                    sock.send(avg_pc_header)
+                    sock.recv(2)  # OK
+                    sock.send(avg_pc_msg)
+                    sock.recv(2)  # OK
+                print("Sent average PC")
+                for sock in fed.conns:
+                    # Send init_param, init_model
+                    sock.send(pickle.dumps(len(init_model_message)))
+                    if sock.recv(2).decode("utf-8") == "OK":
+                        sock.send(init_model_message)
                 fed.conns = set()
                 fed.state = CommStage.REPORT
-            else:
+            else:  # Report stage
                 print("All clients reported.")
                 # Aggregation and distribution
                 grad_sum = 0
                 bias_sum = 0
                 for sock in fed.conns:
-                    # TODO: Do decryption and encryption here
                     client_pk = fed.client_pks[sock]
-                    client_grad = fed.xcrypt_2d(fed.sk.decrypt, fed.grads[sock])
+                    client_grad = xcrypt_2d(fed.sk.decrypt, fed.grads[sock])
                     client_bias = np.array(list(map(fed.sk.decrypt, fed.biases[sock])), dtype="float64")
 
                     grad_sum += client_grad
                     bias_sum += client_bias
 
                 for sock in fed.conns:
-                    print(sock)
                     client_pk = fed.client_pks[sock]
-                    client_grad_sum = fed.xcrypt_2d(client_pk.encrypt, grad_sum)
+                    client_grad_sum = xcrypt_2d(client_pk.encrypt, grad_sum)
                     client_bias_sum = np.array(list(map(client_pk.encrypt, bias_sum)))
 
                     grad_message = pickle.dumps(Message(client_grad_sum, CommStage.PARAM_DIST))
@@ -100,7 +117,6 @@ if __name__ == "__main__":
                     sock.recv(2)
                     sock.send(bias_message)
                 fed.conns = set()
-            # continue
 
         events = fed.sel.select(timeout=None)
         for key, mask in events:
@@ -115,9 +131,21 @@ if __name__ == "__main__":
                     if message.comm_stage == CommStage.CONN_ESTAB:
                         fed.conns.add(sock)
                         fed.client_pks[sock] = message.message
-                        # Send client num
-                        sock.send(str(client_num).encode("utf-8"))
+                        # Send client num and explain ratio
+                        sock.send(str(client_num+explain_ratio).encode("utf-8"))
                         print("Waiting to get all clients")
+                    elif message.comm_stage == CommStage.PC_INFO_EXCHANGE:
+                        # TODO: Pre-processing, receive and save principal components
+                        fed.conns.add(sock)
+                        fed.pc_nums.append(message.message)
+                    elif message.comm_stage == CommStage.PC_AGGREGATION:
+                        fed.conns.add(sock)
+                        pc_header = message.message
+                        sock.send(b"OK")
+                        pc_msg = pickle.loads(sock.recv(pc_header))
+                        # pc = xcrypt_2d(fed.sk.decrypt, pc_msg.message)
+                        pc = pc_msg.message
+                        fed.pcs.append(pc)
                     elif message.comm_stage == CommStage.REPORT:
                         print("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
                         fed.conns.add(sock)
