@@ -16,6 +16,7 @@ __pycache__/
 
 # PyTorch
 *.pth
+*.pt
 
 # Distribution / packaging
 .Python

@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from sklearn.neural_network import MLPRegressor
+from Model import LinearRegression, MLPRegression
 
 
 class Message:
@@ -11,18 +12,22 @@ class Message:
 
 
 if __name__ == "__main__":
-    msg1 = np.random.rand(50, 1)
-    np.save("./data1.npy", msg1)
-    msg2 = np.random.rand(50, 1)
-    np.save("./data2.npy", msg2)
-    init_msg = np.random.rand(50, 1)
-    np.save("./init_data.npy", init_msg)
+    # Pytorch model
+    init_model = LinearRegression(12, 1)
+    torch.save(init_model, "init_model.pt")
 
-    # PyTorch model
-    init_model = torch.nn.Linear(50, 1)
-    torch.save(init_model, "init_model.pth")
-    print(init_model.weight)
-    print(init_model.bias)
+    # msg1 = np.random.rand(50, 1)
+    # np.save("./data1.npy", msg1)
+    # msg2 = np.random.rand(50, 1)
+    # np.save("./data2.npy", msg2)
+    # init_msg = np.random.rand(50, 1)
+    # np.save("./init_data.npy", init_msg)
+    #
+    # # PyTorch model
+    # init_model = torch.nn.Linear(50, 1)
+    # torch.save(init_model, "init_model.pth")
+    # print(init_model.weight)
+    # print(init_model.bias)
 
     # sklearn model
     # init_model = MLPRegressor(hidden_layer_sizes=(50, ), activation="tanh", solver="adam",
@@ -34,5 +39,5 @@ if __name__ == "__main__":
     # print(init_model.coefs_)
     # print(init_model.t_)
 
-    dummy_msg = np.array([0])
-    np.save("./dummy_data.npy", dummy_msg)
+    # dummy_msg = np.array([0])
+    # np.save("./dummy_data.npy", dummy_msg)
