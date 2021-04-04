@@ -128,6 +128,8 @@ if __name__ == "__main__":
                     sock.send(str(len(bias_message)).encode("utf-8"))
                     sock.recv(2)
                     sock.send(bias_message)
+                fed.grads = {}
+                fed.biases = {}
                 fed.conns = set()
 
         events = fed.sel.select(timeout=None)
