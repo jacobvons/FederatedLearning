@@ -14,8 +14,6 @@ def xcrypt_2d(method, message):
     except ValueError:
         m, n = message.shape[0], 1
     output = []
-    print(m, n)
-    print(message)
     if n != 1:  # For encrypting a matrix
         for i in range(0, m):
             output.append(np.array(list(map(method, message[i]))))

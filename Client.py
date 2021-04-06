@@ -12,7 +12,6 @@ from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
 from sklearn.decomposition import PCA
 from XCrypt import xcrypt_2d
-import time
 import torch.nn as nn
 import torch.optim as optim
 
@@ -45,11 +44,13 @@ if __name__ == "__main__":
     host, port, path, client_id = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
     torch.set_default_dtype(torch.float64)
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    # Connection establishment stage
+    # Creating a client
     client = Client(client_id, host, port)
     client.connect()
     client.sock.setblocking(True)
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Connection establishment stage
     init_msg = Message(client.pk, CommStage.CONN_ESTAB)  # init msg 1
     a = dumps(init_msg)
     print("Initial message length:", len(a))
@@ -119,7 +120,6 @@ if __name__ == "__main__":
     print("Sending encrypted PC")
     client.send(dumps(pc_header_msg))  # init msg 3
     client.recv(2)  # No.3
-
     client.send(pc_msg)
     print("Sent")
 
@@ -157,19 +157,16 @@ if __name__ == "__main__":
     for _ in range(1):  # Number of communication rounds
         model = torch.load("client"+client_id+"_model.pt")
         # Training
-        # TODO: Training
         optimizer = optim.SGD(model.parameters(), lr=0.01)
         loss_func = nn.MSELoss()
         model.train()
         for i in range(len(reduced_X_train)):
             optimizer.zero_grad()
             prediction = model(reduced_X_train[i])
-            print(type(prediction))
-            print(type(y_train[i]))
+
             loss = loss_func(prediction, y_train[i])
             loss.backward()
             optimizer.step()
-            print(i)
         print("Done training")
 
         model_grads = []
@@ -222,11 +219,9 @@ if __name__ == "__main__":
 
         torch.save(model, "client"+client_id+"_model.pt")
         print("New model saved.")
-        print(model.linear.weight.data)
-        print(model.linear.bias.data)
 
     # Send END message
     end_msg = Message(b"", CommStage.END)
     client.send(dumps(end_msg))
     client.sock.close()
-    print("end")
+    print("The end")

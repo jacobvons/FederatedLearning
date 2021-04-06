@@ -1,13 +1,10 @@
 import socket
-import selectors
-import types
 import sys
 import numpy as np
 from Message import Message
 from CommStage import CommStage
 from Model import LinearRegression
 import torch
-import sklearn
 import phe
 from XCrypt import xcrypt_2d
 from pickle import dumps, loads
@@ -37,14 +34,6 @@ class Federator:
         self.pc_nums = []
         self.pcs = []
 
-    def accept_wrapper(self, sock):
-        conn, addr = sock.accept()
-        print("Accepted connection from", addr)
-        conn.setblocking(False)
-        data = types.SimpleNamespace(addr=addr, inb=b"", outb=b"", id="")
-        event_actions = selectors.EVENT_READ | selectors.EVENT_WRITE
-        self.sel.register(conn, event_actions, data=data)
-
     def estab_connection(self, sock, message):
         self.client_pks[sock] = message.message  # init msg 1
         # Send client num and explain ratio
@@ -52,7 +41,6 @@ class Federator:
         sock.recv(2)  # No.1
         print("Waiting to get all clients")
         self.conns.add(sock)
-        print(len(self.conns))
         self.all_sockets.append(sock)
 
     def pc_info_exchange(self, sock, message):
@@ -72,7 +60,6 @@ class Federator:
         num_layers = int(message.message)  # init msg 4
         print(f"{num_layers} trainable layers in total")
         for i in range(num_layers):
-            # TODO: Might have a BUG of reading too much bytes and cause blocking on client side
             grad_header_message = loads(sock.recv(1024))
             grad_header = grad_header_message.message
             sock.send(b"OK")  # No.7
@@ -117,7 +104,6 @@ class Federator:
         elif self.state == CommStage.PC_INFO_EXCHANGE:
             self.conns = set()
             max_pc_num = max(self.pc_nums)
-            print("HERE")
             for sock in self.all_sockets:
                 sock.send(dumps(max_pc_num))
                 self.start_listen_thread(sock)
