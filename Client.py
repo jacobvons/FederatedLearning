@@ -44,21 +44,25 @@ if __name__ == "__main__":
     # Initialisation stage
     host, port, path, client_id = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
     torch.set_default_dtype(torch.float64)
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Connection establishment stage
     client = Client(client_id, host, port)
     client.connect()
     client.sock.setblocking(True)
-    init_msg = Message(client.pk, CommStage.CONN_ESTAB)
-    client.send(dumps(init_msg))
-    # save client_num and explain_ratio
+    init_msg = Message(client.pk, CommStage.CONN_ESTAB)  # init msg 1
+    a = dumps(init_msg)
+    print("Initial message length:", len(a))
+    client.send(a)  # Fed: message = loads(sock.recv(2048))
+    # Receive client_num and explain_ratio
     combination = float(client.recv(10).decode("utf-8"))
     client.client_num = int(combination)
     explain_ratio = round(combination - int(combination), 2)
     print(client.client_num, "clients in total.")
     print(f"Want to explain {round(explain_ratio*100, 2)}% of data.")
 
-    # PC info exchange stage
-    # Normalise feature space
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Find number of pc for this client and report OK to federator
     data_df = pd.read_csv(path)
     features = data_df[data_df.columns[:-1]]
     features = preprocessing.normalize(features, axis=0)  # Normalise along instance axis among features
@@ -82,39 +86,52 @@ if __name__ == "__main__":
         else:
             pca = PCA(n_components=pca.n_components+1)
     print("At least", pc_num, "PCs")
+    client.send(b"OK")  # No.1
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Conn establish (federator got all clients)
     # Receive Federator public key
-    fed_pk_header = loads(client.recv(1024))
-    client.send(b"OK")
+    fed_pk_header = loads(client.recv(1024))  # Fed: sock.send(dumps(len(dumps(fed.pk))))
+    client.send(b"OK")  # No.2
     client.fed_pk = loads(client.recv(fed_pk_header))
     print("Received Federator public key")
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # PC info exchange stage
     preprocess_init_msg = Message(pc_num, CommStage.PC_INFO_EXCHANGE)
-    client.send(dumps(preprocess_init_msg))
-    final_pc_num = loads(client.recv(10))
-    # Perform PCA
+    client.send(dumps(preprocess_init_msg))  # init msg 2
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # PC info exchange stage (federator got all clients)
+    final_pc_num = loads(client.recv(10))  # Fed: sock.send(dumps(max_pc_num))
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Perform PCA (Local)
     pca = PCA(n_components=final_pc_num)
     pca.fit(X_train)
-    # PC aggregation stage
-    # Encrypt pcs
     pcs = pca.components_
-    # print("Encrypting PC")
-    # begin = time.time()
-    # encrypted_pcs = xcrypt_2d(client.fed_pk.encrypt, pcs)
-    # end = time.time()
-    # print(f"Done. Spent {end-begin} seconds")
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # PC aggregation stage
     # Send pc to Federator
     pc_msg = dumps(Message(pcs, CommStage.PC_AGGREGATION))
     pc_header_msg = Message(len(pc_msg), CommStage.PC_AGGREGATION)
     print("Sending encrypted PC")
-    client.send(dumps(pc_header_msg))
-    ok = client.recv(2)
+    client.send(dumps(pc_header_msg))  # init msg 3
+    client.recv(2)  # No.3
 
     client.send(pc_msg)
     print("Sent")
-    avg_pc_header = loads(client.recv(1024))
-    client.send(b"OK")
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # PC aggregation stage (federator got all clients)
+    avg_pc_header = loads(client.recv(1024))  # Fed: sock.send(avg_pc_header)
+    client.send(b"OK")  # No.4
     avg_pc_msg = loads(client.recv(avg_pc_header))
-    client.send(b"OK")
-    # avg_pc = xcrypt_2d(client.sk.decrypt, avg_pc_msg.message)
+    client.send(b"OK")  # No.5
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Calculate and save reduced data (Local)
     avg_pc = avg_pc_msg.message
     reduced_X_train = X_train @ avg_pc.T
     reduced_X_test = X_test @ avg_pc.T
@@ -126,17 +143,20 @@ if __name__ == "__main__":
     y_train = torch.from_numpy(y_train)
     y_test = torch.from_numpy(y_test)
 
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Receive initial model stage
-    header = client.recv(1024)
-    client.send(b"OK")
-    model_msg = client.recv(int(loads(header)))
+    header = client.recv(1024)  # Fed: sock.send(dumps(len(init_model_msg)))
+    client.send(b"OK")  # No.6
+    model_msg = client.recv(int(loads(header)))  # Fed: sock.send(init_model_msg)
     model = loads(loads(model_msg).message)
     torch.save(model, "client"+client_id+"_model.pt")
     print("Received model message")
-    print(reduced_X_train.shape)
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Reporting stage
     for _ in range(1):  # Number of communication rounds
         model = torch.load("client"+client_id+"_model.pt")
-        # Training stage
+        # Training
         # TODO: Training
         optimizer = optim.SGD(model.parameters(), lr=0.01)
         loss_func = nn.MSELoss()
@@ -160,58 +180,46 @@ if __name__ == "__main__":
             bias = dumps(np.array(list(map(client.fed_pk.encrypt, np.array(layer.bias.data, dtype="float64")))))
             model_grads.append(grad)
             model_biases.append(bias)
-        # model_grad = dumps(xcrypt_2d(client.fed_pk.encrypt, np.array(model.weight.data, dtype="float64")))
-        # model_bias = dumps(np.array(list(map(client.fed_pk.encrypt, np.array(model.bias.data, dtype="float64")))))
 
-        # Report stage
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # Report stage (client done training)
         print("Sending updates")
         report_start_msg = Message(len(model_grads), CommStage.REPORT)
-        client.send(dumps(report_start_msg))
-        print("Sending different layers")
+        client.send(dumps(report_start_msg))  # init msg 4
+        print(f"Sending {len(model_grads)} trainable layers")
         for i in range(len(model_grads)):
             model_grad = model_grads[i]
             model_bias = model_biases[i]
 
             grad_header = Message(len(model_grad), CommStage.REPORT)
             client.send(dumps(grad_header))
-            ok = client.recv(2)
-            if ok.decode("utf-8") == "OK":  # Federator already received the grad len
-                client.send(model_grad)
-                print("Sent grad")
+            client.recv(2)  # No.7
+            client.send(model_grad)
+            print("Sent grad")
 
             bias_header = Message(len(model_bias), CommStage.REPORT)
             client.send(dumps(bias_header))
-            ok = client.recv(2)
-            if ok.decode("utf-8") == "OK":
-                client.send(model_bias)
-                print("Sent bias")
+            client.recv(2)  # No.8
+            client.send(model_bias)
+            print("Sent bias")
 
-        # Receive updated model info
-        grad_header = int(client.recv(10).decode("utf-8"))
-        client.send(b"OK")
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # Receive updated model info (federator got all grads and biases)
+        grad_header = int(client.recv(10).decode("utf-8"))  # Fed: sock.send(str(len(grad_message)).encode("utf-8"))
+        client.send(b"OK")  # No.9
         new_grads = loads(client.recv(grad_header)).message  # of type np.array with encrypted numbers
         bias_header = int(client.recv(10).decode("utf-8"))
-        client.send(b"OK")
+        client.send(b"OK")  # No.10
         new_biases = loads(client.recv(bias_header)).message  # of type np.array with encrypted numbers
-        print(new_grads)
-        print(new_biases)
+
         for i in range(len(model.layers)):
             layer = model.layers[i]
-            print(new_grads[i])
-            print(new_biases[i])
             new_layer_grad = xcrypt_2d(client.sk.decrypt, new_grads[i])
             new_layer_bias = xcrypt_2d(client.sk.decrypt, new_biases[i])
-            print(new_layer_grad)
-            print(new_layer_bias)
             with torch.no_grad():
                 layer.weight.data = torch.from_numpy(new_layer_grad)
                 layer.bias.data = torch.from_numpy(new_layer_bias)
-        # Decryption
-        # new_grads = torch.from_numpy(xcrypt_2d(client.sk.decrypt, new_grad))
-        # new_biases = torch.from_numpy(np.array(list(map(client.sk.decrypt, new_bias)), dtype="float64"))
-        # # Update & save model
-        # model.weight = torch.nn.Parameter(new_grad / client.client_num)
-        # model.bias = torch.nn.Parameter(new_bias / client.client_num)
+
         torch.save(model, "client"+client_id+"_model.pt")
         print("New model saved.")
         print(model.linear.weight.data)
