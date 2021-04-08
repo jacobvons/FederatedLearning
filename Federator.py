@@ -24,7 +24,6 @@ class Federator:
         self.sock.setblocking(True)
         self.all_data = {}
         self.all_sockets = []
-        self.listen_threads = []
         self.client_num = client_num
         self.conns = set()
         self.state = CommStage.CONN_ESTAB
@@ -34,7 +33,22 @@ class Federator:
         self.pc_nums = []
         self.pcs = []
 
-    def estab_connection(self, sock, message):
+    def reset(self):
+        self.all_data = {}
+        self.all_sockets = []
+        self.conns = set()
+        self.state = CommStage.CONN_ESTAB
+        self.grads = {}
+        self.biases = {}
+        self.client_pks = {}
+        self.pc_nums = []
+        self.pcs = []
+
+    def reset_conns(self):
+        self.conns = set()
+
+    # Single methods
+    def single_estab_connection(self, sock, message):
         self.client_pks[sock] = message.message  # init msg 1
         # Send client num and explain ratio
         sock.send(str(client_num + explain_ratio).encode("utf-8"))
@@ -43,11 +57,11 @@ class Federator:
         self.conns.add(sock)
         self.all_sockets.append(sock)
 
-    def pc_info_exchange(self, sock, message):
+    def single_pc_info_exchange(self, sock, message):
         self.pc_nums.append(message.message)  # init msg 2
         self.conns.add(sock)
 
-    def pc_aggregation(self, sock, message):
+    def single_pc_aggregation(self, sock, message):
         pc_header = message.message  # init msg 3
         sock.send(b"OK")  # No.3
         pc_msg = loads(sock.recv(pc_header))
@@ -55,7 +69,7 @@ class Federator:
         self.pcs.append(pc)
         self.conns.add(sock)
 
-    def report(self, sock, message):
+    def single_report(self, sock, message):
         print("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
         num_layers = int(message.message)  # init msg 4
         print(f"{num_layers} trainable layers in total")
@@ -77,119 +91,138 @@ class Federator:
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", "\n")
         self.conns.add(sock)
 
-    def end(self, sock):
-        sock.close()
-        print(f"connection to {sock} closed")
+    def single_end(self, sock):
+        print(f"To close connection with {sock}")
+        self.conns.add(sock)
+
+    # Batch methods
+    def batch_estab_connection(self):
+        self.reset_conns()
+        print("All clients connected.")
+        for sock in self.all_sockets:
+            # Send pk
+            sock.send(dumps(len(dumps(self.pk))))
+            sock.recv(2)  # No.2
+            sock.send(dumps(self.pk))
+            self.start_listen_thread(sock)
+        print("Sent public key")
+        self.state = CommStage.PC_INFO_EXCHANGE
+
+    def batch_pc_info_exchange(self):
+        self.reset_conns()
+        max_pc_num = max(self.pc_nums)
+        for sock in self.all_sockets:
+            sock.send(dumps(max_pc_num))
+            self.start_listen_thread(sock)
+        self.state = CommStage.PC_AGGREGATION
+
+    def batch_pc_aggregation(self):
+        self.reset_conns()
+        avg_pc = sum(self.pcs) / len(self.pcs)  # TODO: Could implement weighted pcs
+        for sock in self.all_sockets:
+            encrypted_pc = avg_pc
+            avg_pc_msg = dumps(Message(encrypted_pc, CommStage.PC_AGGREGATION))
+            avg_pc_header = dumps(len(avg_pc_msg))
+            sock.send(avg_pc_header)
+            sock.recv(2)  # No.4
+            sock.send(avg_pc_msg)
+            sock.recv(2)  # No.5
+        print("Sent average PC")
+
+        # Model parameter distribution
+        init_model = LinearRegression(len(avg_pc), 1)  # TODO: Make the model general
+        print("Length:", len(avg_pc))
+        init_model_msg = dumps(Message(dumps(init_model), CommStage.PARAM_DIST))
+        for sock in self.all_sockets:
+            # Send init_param, init_model
+            sock.send(dumps(len(init_model_msg)))
+            sock.recv(2)  # No.6
+            sock.send(init_model_msg)
+            self.start_listen_thread(sock)
+            self.state = CommStage.REPORT
+
+    def batch_report(self):
+        self.reset_conns()
+        print("All clients reported.")
+        # Aggregation and distribution
+        grad_sums = 0
+        bias_sums = 0
+        for sock in self.all_sockets:
+            # layer * m * n arrays
+            client_grads = np.array([xcrypt_2d(self.sk.decrypt, g) for g in self.grads[sock]], dtype="float64")
+            client_biases = np.array([xcrypt_2d(self.sk.decrypt, b) for b in self.biases[sock]], dtype="float64")
+
+            # these two includes grads and biases of all layers
+            # Should unpack them on the client's side
+            grad_sums += client_grads
+            bias_sums += client_biases
+
+        for sock in self.all_sockets:
+            client_pk = self.client_pks[sock]
+            client_grad_sums = [xcrypt_2d(client_pk.encrypt, g) for g in list(grad_sums)]
+            client_bias_sums = [xcrypt_2d(client_pk.encrypt, b) for b in list(bias_sums)]
+
+            grad_message = dumps(Message(client_grad_sums, CommStage.PARAM_DIST))
+            bias_message = dumps(Message(client_bias_sums, CommStage.PARAM_DIST))
+
+            sock.send(str(len(grad_message)).encode("utf-8"))
+            sock.recv(2)  # No.9
+            sock.send(grad_message)
+            sock.send(str(len(bias_message)).encode("utf-8"))
+            sock.recv(2)  # No.10
+            sock.send(bias_message)
+            self.start_listen_thread(sock)
+        self.grads = {}
+        self.biases = {}
+        self.state = CommStage.END
+
+    def batch_end(self):
+        self.reset_conns()
+        for sock in self.all_sockets:
+            sock.send(b"OK")  # No.11
+            sock.close()
+            print(f"Connection to {sock} closed")
+        self.reset()
 
     def start_listen_thread(self, sock):
         listen_thread = Thread(target=self.single_proceed, args=(sock,))
-        self.listen_threads.append(listen_thread)
         listen_thread.start()
 
     def batch_proceed(self):
-
         if self.state == CommStage.CONN_ESTAB:
-            self.conns = set()
-            print("All clients connected.")
-            for sock in self.all_sockets:
-                # Send pk
-                sock.send(dumps(len(dumps(self.pk))))
-                sock.recv(2)  # No.2
-                sock.send(dumps(self.pk))
-                self.start_listen_thread(sock)
-
-            print("Sent public key")
-            self.state = CommStage.PC_INFO_EXCHANGE
+            self.batch_estab_connection()
 
         elif self.state == CommStage.PC_INFO_EXCHANGE:
-            self.conns = set()
-            max_pc_num = max(self.pc_nums)
-            for sock in self.all_sockets:
-                sock.send(dumps(max_pc_num))
-                self.start_listen_thread(sock)
-            self.state = CommStage.PC_AGGREGATION
+            self.batch_pc_info_exchange()
 
         elif self.state == CommStage.PC_AGGREGATION:
-            self.conns = set()
-            avg_pc = sum(self.pcs) / len(self.pcs)  # TODO: Could implement weighted pcs
-            for sock in self.all_sockets:
-                encrypted_pc = avg_pc
-                avg_pc_msg = dumps(Message(encrypted_pc, CommStage.PC_AGGREGATION))
-                avg_pc_header = dumps(len(avg_pc_msg))
-                sock.send(avg_pc_header)
-                sock.recv(2)  # No.4
-                sock.send(avg_pc_msg)
-                sock.recv(2)  # No.5
-            print("Sent average PC")
+            self.batch_pc_aggregation()
 
-            # Model parameter distribution
-            init_model = LinearRegression(len(avg_pc), 1)  # TODO: Make the model general
-            print("Length:", len(avg_pc))
-            init_model_msg = dumps(Message(dumps(init_model), CommStage.PARAM_DIST))
-            for sock in self.all_sockets:
-                # Send init_param, init_model
-                sock.send(dumps(len(init_model_msg)))
-                sock.recv(2)  # No.6
-                sock.send(init_model_msg)
-                self.start_listen_thread(sock)
-                self.state = CommStage.REPORT
+        elif self.state == CommStage.REPORT:
+            self.batch_report()
 
-        elif self.state == CommStage.REPORT:  # Report stage
-            self.conns = set()
-            print("All clients reported.")
-            # Aggregation and distribution
-            grad_sums = 0
-            bias_sums = 0
-            for sock in self.all_sockets:
-                # layer * m * n arrays
-                client_grads = np.array([xcrypt_2d(self.sk.decrypt, g) for g in self.grads[sock]], dtype="float64")
-                client_biases = np.array([xcrypt_2d(self.sk.decrypt, b) for b in self.biases[sock]], dtype="float64")
-
-                # these two includes grads and biases of all layers
-                # Should unpack them on the client's side
-                grad_sums += client_grads
-                bias_sums += client_biases
-
-            for sock in self.all_sockets:
-                client_pk = self.client_pks[sock]
-                client_grad_sums = [xcrypt_2d(client_pk.encrypt, g) for g in list(grad_sums)]
-                client_bias_sums = [xcrypt_2d(client_pk.encrypt, b) for b in list(bias_sums)]
-
-                grad_message = dumps(Message(client_grad_sums, CommStage.PARAM_DIST))
-                bias_message = dumps(Message(client_bias_sums, CommStage.PARAM_DIST))
-
-                sock.send(str(len(grad_message)).encode("utf-8"))
-                sock.recv(2)  # No.9
-                sock.send(grad_message)
-                sock.send(str(len(bias_message)).encode("utf-8"))
-                sock.recv(2)  # No.10
-                sock.send(bias_message)
-                self.start_listen_thread(sock)
-            self.grads = {}
-            self.biases = {}
+        elif self.state == CommStage.END:
+            self.batch_end()
 
     def single_proceed(self, sock):
-        message = loads(sock.recv(2048))  # initial messages
-
+        message = loads(sock.recv(2048))
+        single_thread = None
         if message.comm_stage == CommStage.CONN_ESTAB:
-            thread = Thread(target=self.estab_connection, args=(sock, message))
-            thread.start()
+            single_thread = Thread(target=self.single_estab_connection, args=(sock, message))
 
         elif message.comm_stage == CommStage.PC_INFO_EXCHANGE:
-            thread = Thread(target=self.pc_info_exchange, args=(sock, message))
-            thread.start()
+            single_thread = Thread(target=self.single_pc_info_exchange, args=(sock, message))
 
         elif message.comm_stage == CommStage.PC_AGGREGATION:
-            thread = Thread(target=self.pc_aggregation, args=(sock, message))
-            thread.start()
+            single_thread = Thread(target=self.single_pc_aggregation, args=(sock, message))
 
         elif message.comm_stage == CommStage.REPORT:
-            thread = Thread(target=self.report, args=(sock, message))
-            thread.start()
+            single_thread = Thread(target=self.single_report, args=(sock, message))
 
         elif message.comm_stage == CommStage.END:
-            thread = Thread(target=self.end, args=(sock,))
-            thread.start()
+            single_thread = Thread(target=self.single_end, args=(sock,))
+
+        single_thread.start()
 
 
 if __name__ == "__main__":
@@ -216,5 +249,3 @@ if __name__ == "__main__":
             thread = Thread(target=fed.batch_proceed)
             thread.start()
             thread.join()  # Do NOT accept new connections until this process is done
-
-        fed.listen_threads = [t for t in fed.listen_threads if t.is_alive()]

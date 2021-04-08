@@ -113,7 +113,7 @@ class Client:
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # PC aggregation stage (federator got all clients)
-        avg_pc_header = loads(self.recv(1024))  # Fed: sock.send(avg_pc_header)
+        avg_pc_header = loads(self.recv(1024))
         self.send(b"OK")  # No.4
         avg_pc_msg = loads(self.recv(avg_pc_header))
         self.send(b"OK")  # No.5
@@ -127,23 +127,23 @@ class Client:
         np.save(f"./client{self.client_id}/reduced_X_test.npy", reduced_X_test)
         print("Reduced dimensionality of original data")
         reduced_X_train = torch.from_numpy(reduced_X_train)
-        reduced_X_test = torch.from_numpy(reduced_X_test)
         y_train = torch.from_numpy(y_train)
-        y_test = torch.from_numpy(y_test)
+        # reduced_X_test = torch.from_numpy(reduced_X_test)
+        # y_test = torch.from_numpy(y_test)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Receive initial model stage
-        header = self.recv(1024)  # Fed: sock.send(dumps(len(init_model_msg)))
+        header = self.recv(1024)
         self.send(b"OK")  # No.6
-        model_msg = self.recv(int(loads(header)))  # Fed: sock.send(init_model_msg)
+        model_msg = self.recv(int(loads(header)))
         model = loads(loads(model_msg).message)
-        torch.save(model, "client" + str(self.client_id) + "_model.pt")
+        torch.save(model, f"./client{self.client_id}/client{self.client_id}_initial_model.pt")
         print("Received model message")
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Reporting stage
         for _ in range(1):  # Number of communication rounds
-            model = torch.load("client" + str(self.client_id) + "_model.pt")
+            model = torch.load(f"./client{self.client_id}/client{self.client_id}_initial_model.pt")
             # Training
             optimizer = optim.SGD(model.parameters(), lr=0.01)
             loss_func = nn.MSELoss()
@@ -190,7 +190,7 @@ class Client:
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # Receive updated model info (federator got all grads and biases)
-            grad_header = int(self.recv(10).decode("utf-8"))  # Fed: sock.send(str(len(grad_message)).encode("utf-8"))
+            grad_header = int(self.recv(10).decode("utf-8"))
             self.send(b"OK")  # No.9
             new_grads = loads(self.recv(grad_header)).message  # of type np.array with encrypted numbers
             bias_header = int(self.recv(10).decode("utf-8"))
@@ -211,6 +211,7 @@ class Client:
         # Send END message
         end_msg = Message(b"", CommStage.END)
         self.send(dumps(end_msg))
+        self.recv(2)  # No.11
         self.sock.close()
         print("The end")
 
