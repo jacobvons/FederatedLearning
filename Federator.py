@@ -34,6 +34,11 @@ class Federator:
         self.pcs = []
 
     def reset(self):
+        """
+        Revert the Federator to initial state for next batch of connections
+
+        :return:
+        """
         self.all_data = {}
         self.all_sockets = []
         self.conns = set()
@@ -45,10 +50,22 @@ class Federator:
         self.pcs = []
 
     def reset_conns(self):
+        """
+        Reset connections of this batch collection round
+
+        :return:
+        """
         self.conns = set()
 
     # Single methods
     def single_estab_connection(self, sock, message):
+        """
+        Establish connection to a single client
+
+        :param sock: the socket the connection is on
+        :param message: Message with CommStage CONN_ESTAB, message body is client public key
+        :return:
+        """
         self.client_pks[sock] = message.message  # init msg 1
         # Send client num and explain ratio
         sock.send(str(client_num + explain_ratio).encode("utf-8"))
@@ -58,10 +75,24 @@ class Federator:
         self.all_sockets.append(sock)
 
     def single_pc_info_exchange(self, sock, message):
+        """
+        Adding PC number of a single thread to the Federator
+
+        :param sock: the socket the connection is on
+        :param message: Message with CommState PC_INFO_EXCHANGE, message body is PC number of the client
+        :return:
+        """
         self.pc_nums.append(message.message)  # init msg 2
         self.conns.add(sock)
 
     def single_pc_aggregation(self, sock, message):
+        """
+        Receiving PC from a client
+
+        :param sock: the socket the connection is on
+        :param message: Message with CommStage PC_AGGREGATION, message body is PC header (length in bytes)
+        :return:
+        """
         pc_header = message.message  # init msg 3
         sock.send(b"OK")  # No.3
         pc_msg = loads(sock.recv(pc_header))
@@ -70,6 +101,13 @@ class Federator:
         self.conns.add(sock)
 
     def single_report(self, sock, message):
+        """
+        Receive model parameters from a client and save them
+
+        :param sock: the socket the connection is on
+        :param message: Message with CommStage REPORT, message body is number of trainable layers of client
+        :return:
+        """
         print("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
         num_layers = int(message.message)  # init msg 4
         print(f"{num_layers} trainable layers in total")
@@ -92,11 +130,22 @@ class Federator:
         self.conns.add(sock)
 
     def single_end(self, sock):
+        """
+        Collects a client for closing connection
+
+        :param sock: the socket the connection is on
+        :return:
+        """
         print(f"To close connection with {sock}")
         self.conns.add(sock)
 
     # Batch methods
     def batch_estab_connection(self):
+        """
+        Send Federator's public key to all clients
+
+        :return:
+        """
         self.reset_conns()
         print("All clients connected.")
         for sock in self.all_sockets:
@@ -109,6 +158,11 @@ class Federator:
         self.state = CommStage.PC_INFO_EXCHANGE
 
     def batch_pc_info_exchange(self):
+        """
+        Send out how many PC each client should be calculating to clients
+
+        :return:
+        """
         self.reset_conns()
         max_pc_num = max(self.pc_nums)
         for sock in self.all_sockets:
@@ -117,6 +171,11 @@ class Federator:
         self.state = CommStage.PC_AGGREGATION
 
     def batch_pc_aggregation(self):
+        """
+        Aggregate PCs from clients and distribute "averaged" PC to all clients
+
+        :return:
+        """
         self.reset_conns()
         avg_pc = sum(self.pcs) / len(self.pcs)  # TODO: Could implement weighted pcs
         for sock in self.all_sockets:
@@ -142,6 +201,11 @@ class Federator:
             self.state = CommStage.REPORT
 
     def batch_report(self):
+        """
+        Calculates "averaged" model information and send the outcome to clients
+
+        :return:
+        """
         self.reset_conns()
         print("All clients reported.")
         # Aggregation and distribution
@@ -177,6 +241,11 @@ class Federator:
         self.state = CommStage.END
 
     def batch_end(self):
+        """
+        Closing connection to all clients and reset Federator to initial state
+
+        :return:
+        """
         self.reset_conns()
         for sock in self.all_sockets:
             sock.send(b"OK")  # No.11
@@ -184,11 +253,23 @@ class Federator:
             print(f"Connection to {sock} closed")
         self.reset()
 
+    # Proceeding methods
     def start_listen_thread(self, sock):
+        """
+        Start a thread for processing a single socket connection
+
+        :param sock: the socket the connection is on
+        :return:
+        """
         listen_thread = Thread(target=self.single_proceed, args=(sock,))
         listen_thread.start()
 
     def batch_proceed(self):
+        """
+        Process all clients based on the communication stage
+
+        :return:
+        """
         if self.state == CommStage.CONN_ESTAB:
             self.batch_estab_connection()
 
@@ -205,6 +286,12 @@ class Federator:
             self.batch_end()
 
     def single_proceed(self, sock):
+        """
+        Process a single connection on a new thread based on the communication stage
+
+        :param sock: the socket the connection is on
+        :return:
+        """
         message = loads(sock.recv(2048))
         single_thread = None
         if message.comm_stage == CommStage.CONN_ESTAB:
