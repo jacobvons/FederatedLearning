@@ -4,11 +4,22 @@ import numpy as np
 from Message import Message
 from CommStage import CommStage
 from Model import LinearRegression
+from Model import MLPRegression
 import torch
 import phe
 from XCrypt import xcrypt_2d
 from pickle import dumps, loads
 from threading import Thread
+
+
+def recv_large(sock):
+    data = b""
+    while True:
+        pack = sock.recv(1024)
+        data += pack
+        if data[-3:] == b"end":
+            break
+    return data[:-3]
 
 
 class Federator:
@@ -112,20 +123,16 @@ class Federator:
         num_layers = int(message.message)  # init msg 4
         print(f"{num_layers} trainable layers in total")
         for i in range(num_layers):
-            grad_header_message = loads(sock.recv(1024))
-            grad_header = grad_header_message.message
-            sock.send(b"OK")  # No.7
-            grad = loads(sock.recv(int(grad_header)))  # np.array of encrypted number
-
-            bias_header = loads(sock.recv(1024)).message
-            sock.send(b"OK")  # No.8
-            bias = loads(sock.recv(int(bias_header)))  # np.array of encrypted number
-
+            grad = loads(recv_large(sock))  # np.array of encrypted number
+            sock.send(b"OK")  # No.7.5
+            bias = loads(recv_large(sock))  # np.array of encrypted number
             if sock not in self.grads.keys():
                 self.grads[sock] = []
                 self.biases[sock] = []
             self.grads[sock].append(grad)
             self.biases[sock].append(bias)
+            sock.send(b"OK")  # No.8.5
+        sock.recv(2)  # No.8.75
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", "\n")
         self.conns.add(sock)
 
@@ -189,16 +196,19 @@ class Federator:
         print("Sent average PC")
 
         # Model parameter distribution
-        init_model = LinearRegression(len(avg_pc), 1)  # TODO: Make the model general
+        # init_model = LinearRegression(len(avg_pc), 1)  # TODO: Make the model general
+        init_model = MLPRegression(len(avg_pc), 8, 1, 2)
         print("Length:", len(avg_pc))
+        # TODO: Integrate optimizer and loss function into the message as well
         init_model_msg = dumps(Message(dumps(init_model), CommStage.PARAM_DIST))
         for sock in self.all_sockets:
             # Send init_param, init_model
             sock.send(dumps(len(init_model_msg)))
             sock.recv(2)  # No.6
             sock.send(init_model_msg)
+            sock.recv(2)  # No.6.5
             self.start_listen_thread(sock)
-            self.state = CommStage.REPORT
+        self.state = CommStage.REPORT
 
     def batch_report(self):
         """
@@ -209,32 +219,31 @@ class Federator:
         self.reset_conns()
         print("All clients reported.")
         # Aggregation and distribution
-        grad_sums = 0
-        bias_sums = 0
+        grad_sums = []
+        bias_sums = []
         for sock in self.all_sockets:
             # layer * m * n arrays
-            client_grads = np.array([xcrypt_2d(self.sk.decrypt, g) for g in self.grads[sock]], dtype="float64")
-            client_biases = np.array([xcrypt_2d(self.sk.decrypt, b) for b in self.biases[sock]], dtype="float64")
+            client_grads = [xcrypt_2d(self.sk.decrypt, g) for g in self.grads[sock]]
+            client_biases = [xcrypt_2d(self.sk.decrypt, b) for b in self.biases[sock]]
 
-            # these two includes grads and biases of all layers
-            # Should unpack them on the client's side
-            grad_sums += client_grads
-            bias_sums += client_biases
+            if not len(grad_sums):
+                grad_sums = client_grads
+                bias_sums = client_biases
+            else:
+                grad_sums = [grad_sums[i] + client_grads[i] for i in range(0, len(client_grads))]
+                bias_sums = [bias_sums[i] + client_biases[i] for i in range(0, len(bias_sums))]
 
         for sock in self.all_sockets:
             client_pk = self.client_pks[sock]
-            client_grad_sums = [xcrypt_2d(client_pk.encrypt, g) for g in list(grad_sums)]
-            client_bias_sums = [xcrypt_2d(client_pk.encrypt, b) for b in list(bias_sums)]
+            client_grad_sums = [xcrypt_2d(client_pk.encrypt, g) for g in grad_sums]
+            client_bias_sums = [xcrypt_2d(client_pk.encrypt, b) for b in bias_sums]
 
             grad_message = dumps(Message(client_grad_sums, CommStage.PARAM_DIST))
             bias_message = dumps(Message(client_bias_sums, CommStage.PARAM_DIST))
 
-            sock.send(str(len(grad_message)).encode("utf-8"))
-            sock.recv(2)  # No.9
-            sock.send(grad_message)
-            sock.send(str(len(bias_message)).encode("utf-8"))
-            sock.recv(2)  # No.10
-            sock.send(bias_message)
+            sock.send(grad_message+b"end")
+            sock.recv(2)  # No.9.5
+            sock.send(bias_message+b"end")
             self.start_listen_thread(sock)
         self.grads = {}
         self.biases = {}
@@ -292,7 +301,7 @@ class Federator:
         :param sock: the socket the connection is on
         :return:
         """
-        message = loads(sock.recv(2048))
+        message = loads(recv_large(sock))
         single_thread = None
         if message.comm_stage == CommStage.CONN_ESTAB:
             single_thread = Thread(target=self.single_estab_connection, args=(sock, message))
@@ -320,8 +329,8 @@ if __name__ == "__main__":
 
     while True:
 
-        if len(fed.all_sockets) < fed.client_num:  # Collecting client connections
-            fed.sock.settimeout(0.1)  # 3s timeout
+        if len(fed.all_sockets) < fed.client_num and fed.state == CommStage.CONN_ESTAB:  # Collecting client connections
+            fed.sock.settimeout(0.00001)  # 0.1s timeout for "refreshing"
             try:
                 conn, addr = fed.sock.accept()  # Accept new connections
                 print("Accepted connection from", addr)

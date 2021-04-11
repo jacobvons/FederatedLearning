@@ -38,11 +38,20 @@ class Client:
         message = self.sock.recv(size)  # In bytes
         return message
 
+    def recv_large(self):
+        data = b""
+        while True:
+            pack = self.recv(1024)
+            data += pack
+            if data[-3:] == b"end":
+                break
+        return data[:-3]
+
     def work(self, path):
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # Connection establishment stage
+        # Connection establishment stage (single)
         init_msg = Message(self.pk, CommStage.CONN_ESTAB)  # init msg 1
-        self.send(dumps(init_msg))  # Fed: message = loads(sock.recv(2048))
+        self.send(dumps(init_msg)+b"end")  # Fed: message = loads(sock.recv(2048))
         # Receive client_num and explain_ratio
         combination = float(self.recv(10).decode("utf-8"))
         self.client_num = int(combination)
@@ -78,7 +87,7 @@ class Client:
         self.send(b"OK")  # No.1
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # Conn establish (federator got all clients)
+        # Conn establish (batch)
         # Receive Federator public key
         fed_pk_header = loads(self.recv(1024))  # Fed: sock.send(dumps(len(dumps(fed.pk))))
         self.send(b"OK")  # No.2
@@ -86,12 +95,12 @@ class Client:
         print("Received Federator public key")
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # PC info exchange stage
+        # PC info exchange stage (single)
         preprocess_init_msg = Message(pc_num, CommStage.PC_INFO_EXCHANGE)
-        self.send(dumps(preprocess_init_msg))  # init msg 2
+        self.send(dumps(preprocess_init_msg)+b"end")  # init msg 2
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # PC info exchange stage (federator got all clients)
+        # PC info exchange stage (batch)
         final_pc_num = loads(self.recv(10))  # Fed: sock.send(dumps(max_pc_num))
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -101,18 +110,18 @@ class Client:
         pcs = pca.components_
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # PC aggregation stage
+        # PC aggregation stage (single)
         # Send pc to Federator
         pc_msg = dumps(Message(pcs, CommStage.PC_AGGREGATION))
         pc_header_msg = Message(len(pc_msg), CommStage.PC_AGGREGATION)
         print("Sending encrypted PC")
-        self.send(dumps(pc_header_msg))  # init msg 3
+        self.send(dumps(pc_header_msg)+b"end")  # init msg 3
         self.recv(2)  # No.3
         self.send(pc_msg)
         print("Sent")
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # PC aggregation stage (federator got all clients)
+        # PC aggregation stage (batch)
         avg_pc_header = loads(self.recv(1024))
         self.send(b"OK")  # No.4
         avg_pc_msg = loads(self.recv(avg_pc_header))
@@ -132,19 +141,21 @@ class Client:
         # y_test = torch.from_numpy(y_test)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # Receive initial model stage
+        # Receive initial model stage (single)
         header = self.recv(1024)
         self.send(b"OK")  # No.6
         model_msg = self.recv(int(loads(header)))
         model = loads(loads(model_msg).message)
         torch.save(model, f"./client{self.client_id}/client{self.client_id}_initial_model.pt")
         print("Received model message")
+        self.send(b"OK")  # No.6.5
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # Reporting stage
+        # Reporting stage (batch)
         for _ in range(1):  # Number of communication rounds
             model = torch.load(f"./client{self.client_id}/client{self.client_id}_initial_model.pt")
             # Training
+            # TODO: Receive optimizer and loss function from Federator as well
             optimizer = optim.SGD(model.parameters(), lr=0.01)
             loss_func = nn.MSELoss()
             model.train()
@@ -167,35 +178,36 @@ class Client:
                 model_biases.append(bias)
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            # Report stage (client done training)
+            # Report stage (single)
             print("Sending updates")
             report_start_msg = Message(len(model_grads), CommStage.REPORT)
-            self.send(dumps(report_start_msg))  # init msg 4
+            self.send(dumps(report_start_msg)+b"end")  # init msg 4
             print(f"Sending {len(model_grads)} trainable layers")
             for i in range(len(model_grads)):
                 model_grad = model_grads[i]
                 model_bias = model_biases[i]
 
                 grad_header = Message(len(model_grad), CommStage.REPORT)
-                self.send(dumps(grad_header))
-                self.recv(2)  # No.7
-                self.send(model_grad)
-                print("Sent grad")
-
                 bias_header = Message(len(model_bias), CommStage.REPORT)
-                self.send(dumps(bias_header))
-                self.recv(2)  # No.8
-                self.send(model_bias)
+                # self.send(dumps(grad_header)+b"end")
+                # print(len(model_grad))
+                # self.recv(2)  # No.7
+                self.send(model_grad+b"end")
+                print("Sent grad")
+                self.recv(2)  # No.7.5
+                # self.send(dumps(bias_header)+b"end")
+                # self.recv(2)  # No.8
+                self.send(model_bias+b"end")
                 print("Sent bias")
+                self.recv(2)  # No.8.5
+            self.send(b"OK")  # No.8.75
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            # Receive updated model info (federator got all grads and biases)
-            grad_header = int(self.recv(10).decode("utf-8"))
-            self.send(b"OK")  # No.9
-            new_grads = loads(self.recv(grad_header)).message  # of type np.array with encrypted numbers
-            bias_header = int(self.recv(10).decode("utf-8"))
-            self.send(b"OK")  # No.10
-            new_biases = loads(self.recv(bias_header)).message  # of type np.array with encrypted numbers
+            # Report stage (batch)
+            # Receive updated model info
+            new_grads = loads(self.recv_large()).message  # of type np.array with encrypted numbers
+            self.send(b"OK")  # No.9.5
+            new_biases = loads(self.recv_large()).message  # of type np.array with encrypted numbers
 
             for i in range(len(model.layers)):
                 layer = model.layers[i]
@@ -208,15 +220,21 @@ class Client:
             torch.save(model, f"./client{self.client_id}/client{self.client_id}_model.pt")
             print("New model saved.")
 
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # End stage (single)
         # Send END message
         end_msg = Message(b"", CommStage.END)
-        self.send(dumps(end_msg))
+        self.send(dumps(end_msg)+b"end")  # init msg 5
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # End stage (batch)
         self.recv(2)  # No.11
         self.sock.close()
         print("The end")
 
 
 if __name__ == "__main__":
+    # Used for creating single client (mainly for testing) 
     host, port, path, client_id = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
     torch.set_default_dtype(torch.float64)
 
