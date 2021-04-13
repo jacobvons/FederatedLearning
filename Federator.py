@@ -15,7 +15,7 @@ from GeneralFunc import recv_large, format_msg
 
 class Federator:
 
-    def __init__(self, host, port, client_num):
+    def __init__(self, host, port, client_num, comm_rounds, explain_ratio):
         self.host = host
         self.port = port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -27,6 +27,8 @@ class Federator:
         self.all_data = {}
         self.all_sockets = []
         self.client_num = client_num
+        self.comm_rounds = comm_rounds
+        self.explain_ratio = explain_ratio
         self.conns = set()
         self.state = CommStage.CONN_ESTAB
         self.grads = {}
@@ -34,6 +36,7 @@ class Federator:
         self.client_pks = {}
         self.pc_nums = []
         self.pcs = []
+        self.current_round = 1
 
     def reset(self):
         """
@@ -50,6 +53,7 @@ class Federator:
         self.client_pks = {}
         self.pc_nums = []
         self.pcs = []
+        self.current_round = 1
 
     def reset_conns(self):
         """
@@ -70,7 +74,8 @@ class Federator:
         """
         self.client_pks[sock] = message.message  # init msg 1
         # Send client num and explain ratio
-        sock.send(str(client_num + explain_ratio).encode("utf-8"))
+        # sock.send(str(client_num + explain_ratio).encode("utf-8"))
+        sock.send(format_msg(dumps([self.client_num, self.explain_ratio, self.comm_rounds])))
         sock.recv(2)  # No.1
         print("Waiting to get all clients")
         self.conns.add(sock)
@@ -108,8 +113,10 @@ class Federator:
         :return:
         """
         print("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
-        num_layers = int(message.message)  # init msg 4
+        num_layers, current_round = message.message  # init msg 4
         print(f"{num_layers} trainable layers in total")
+        print(f"communication round {current_round}")
+        self.current_round = current_round
         for i in range(num_layers):
             grad = loads(recv_large(sock))  # np.array of encrypted number
             sock.send(b"OK")  # No.7.5
@@ -179,8 +186,8 @@ class Federator:
         print("Sent average PC")
 
         # Model parameter distribution
-        init_model = LinearRegression(len(avg_pc), 1)  # TODO: Make the model general
-        # init_model = MLPRegression(len(avg_pc), 8, 1, 2)
+        # init_model = LinearRegression(len(avg_pc), 1)  # TODO: Make the model general
+        init_model = MLPRegression(len(avg_pc), 8, 1, 2)
         print("Length:", len(avg_pc))
         # TODO: Integrate optimizer and loss function into the message as well
         init_model_msg = format_msg(dumps(Message(dumps(init_model), CommStage.PARAM_DIST)))
@@ -227,7 +234,8 @@ class Federator:
             self.start_listen_thread(sock)
         self.grads = {}
         self.biases = {}
-        self.state = CommStage.END
+        if self.current_round == self.comm_rounds:
+            self.state = CommStage.END
 
     def batch_end(self):
         """
@@ -302,9 +310,8 @@ class Federator:
 
 
 if __name__ == "__main__":
-    host, port, client_num = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
-    fed = Federator(host, port, client_num)
-    explain_ratio = 0.85
+    host, port, client_num, training_rounds, explain_ratio = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), float(sys.argv[5])
+    fed = Federator(host, port, client_num, training_rounds, explain_ratio)
     torch.set_default_dtype(torch.float64)
 
     while True:
