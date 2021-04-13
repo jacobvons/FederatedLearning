@@ -1,4 +1,5 @@
 import socket
+import argparse
 import sys
 import numpy as np
 from Message import Message
@@ -15,7 +16,7 @@ from GeneralFunc import recv_large, format_msg
 
 class Federator:
 
-    def __init__(self, host, port, client_num, comm_rounds, explain_ratio):
+    def __init__(self, host, port, client_num, comm_rounds, explain_ratio, xcrypt):
         self.host = host
         self.port = port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -37,6 +38,7 @@ class Federator:
         self.pc_nums = []
         self.pcs = []
         self.current_round = 1
+        self.xcrypt = xcrypt
 
     def reset(self):
         """
@@ -74,8 +76,7 @@ class Federator:
         """
         self.client_pks[sock] = message.message  # init msg 1
         # Send client num and explain ratio
-        # sock.send(str(client_num + explain_ratio).encode("utf-8"))
-        sock.send(format_msg(dumps([self.client_num, self.explain_ratio, self.comm_rounds])))
+        sock.send(format_msg(dumps([self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt])))
         sock.recv(2)  # No.1
         print("Waiting to get all clients")
         self.conns.add(sock)
@@ -210,8 +211,8 @@ class Federator:
         bias_sums = []
         for sock in self.all_sockets:
             # layer * m * n arrays
-            client_grads = [xcrypt_2d(self.sk.decrypt, g) for g in self.grads[sock]]
-            client_biases = [xcrypt_2d(self.sk.decrypt, b) for b in self.biases[sock]]
+            client_grads = [xcrypt_2d(self.sk.decrypt, g, self.xcrypt) for g in self.grads[sock]]
+            client_biases = [xcrypt_2d(self.sk.decrypt, b, self.xcrypt) for b in self.biases[sock]]
 
             if not len(grad_sums):
                 grad_sums = client_grads
@@ -222,8 +223,8 @@ class Federator:
 
         for sock in self.all_sockets:
             client_pk = self.client_pks[sock]
-            client_grad_sums = [xcrypt_2d(client_pk.encrypt, g) for g in grad_sums]
-            client_bias_sums = [xcrypt_2d(client_pk.encrypt, b) for b in bias_sums]
+            client_grad_sums = [xcrypt_2d(client_pk.encrypt, g, self.xcrypt) for g in grad_sums]
+            client_bias_sums = [xcrypt_2d(client_pk.encrypt, b, self.xcrypt) for b in bias_sums]
 
             grad_message = dumps(Message(client_grad_sums, CommStage.PARAM_DIST))
             bias_message = dumps(Message(client_bias_sums, CommStage.PARAM_DIST))
@@ -310,8 +311,33 @@ class Federator:
 
 
 if __name__ == "__main__":
-    host, port, client_num, training_rounds, explain_ratio = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), float(sys.argv[5])
-    fed = Federator(host, port, client_num, training_rounds, explain_ratio)
+    """
+    Start the Federator
+    
+    Command Line Arguments
+    --h: host, compulsory
+    --p: port, compulsory
+    --n: client number, compulsory
+    --rounds: communication rounds, default 1
+    --ratio: explain ratio, must be float, default 0.85
+    --x: xcrypt or not, 1 or 0, default 1
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--h")
+    parser.add_argument("--p")
+    parser.add_argument("--n")
+    parser.add_argument("--rounds")
+    parser.add_argument("--ratio")
+    parser.add_argument("--x")
+    args = parser.parse_args()
+
+    host = args.h
+    port = int(args.p)
+    client_num = int(args.n)
+    training_rounds = int(args.rounds) if args.rounds else 1
+    explain_ratio = float(args.ratio) if args.ratio else 0.85
+    xcrypt = bool(int(args.x)) if args.x else True
+    fed = Federator(host, port, client_num, training_rounds, explain_ratio, xcrypt)
     torch.set_default_dtype(torch.float64)
 
     while True:

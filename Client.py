@@ -1,4 +1,5 @@
 import socket
+import argparse
 from pickle import dumps, loads
 import sys
 import os
@@ -28,6 +29,7 @@ class Client:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.client_num = 0
         self.current_round = 1
+        self.xcrypt = True
 
     def connect(self):
         self.sock.connect((self.host, self.port))
@@ -55,7 +57,7 @@ class Client:
         init_msg = Message(self.pk, CommStage.CONN_ESTAB)  # init msg 1
         self.send(format_msg(dumps(init_msg)))  # Fed: message = loads(sock.recv(2048))
         # Receive client_num and explain_ratio
-        self.client_num, self.explain_ratio, self.comm_rounds = loads(self.recv_large())
+        self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt = loads(self.recv_large())
         print(self.client_num, "clients in total.")
         print(f"Want to explain {round(self.explain_ratio * 100, 2)}% of data.")
 
@@ -163,8 +165,11 @@ class Client:
             model_biases = []
             print("Encrypting model message")
             for layer in model.layers:
-                grad = dumps(xcrypt_2d(self.fed_pk.encrypt, np.array(layer.weight.data, dtype="float64")))
-                bias = dumps(np.array(list(map(self.fed_pk.encrypt, np.array(layer.bias.data, dtype="float64")))))
+                grad = dumps(xcrypt_2d(self.fed_pk.encrypt, np.array(layer.weight.data, dtype="float64"), self.xcrypt))
+                if self.xcrypt:
+                    bias = dumps(np.array(list(map(self.fed_pk.encrypt, np.array(layer.bias.data, dtype="float64")))))
+                else:
+                    bias = dumps(np.array(layer.bias.data, dtype="float64"))
                 model_grads.append(grad)
                 model_biases.append(bias)
 
@@ -195,8 +200,8 @@ class Client:
 
             for i in range(len(model.layers)):
                 layer = model.layers[i]
-                new_layer_grad = xcrypt_2d(self.sk.decrypt, new_grads[i])
-                new_layer_bias = xcrypt_2d(self.sk.decrypt, new_biases[i])
+                new_layer_grad = xcrypt_2d(self.sk.decrypt, new_grads[i], self.xcrypt)
+                new_layer_bias = xcrypt_2d(self.sk.decrypt, new_biases[i], self.xcrypt)
                 with torch.no_grad():
                     layer.weight.data = torch.from_numpy(new_layer_grad)
                     layer.bias.data = torch.from_numpy(new_layer_bias)
@@ -219,8 +224,27 @@ class Client:
 
 
 if __name__ == "__main__":
-    # Used for creating single client (mainly for testing) 
-    host, port, path, client_id = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
+    """
+    Start a single client (for testing mainly)
+    
+    Command Line Arguments
+    --h: host, compulsory
+    --p: port, compulsory
+    --path: relative path to training data, compulsory
+    --i: client id, compulsory
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--h")
+    parser.add_argument("--p")
+    parser.add_argument("--path")
+    parser.add_argument("--i")
+    args = parser.parse_args()
+
+    host = args.h
+    port = int(args.p)
+    path = args.path
+    client_id = args.i
+
     torch.set_default_dtype(torch.float64)
 
     client = Client(client_id, host, port)
