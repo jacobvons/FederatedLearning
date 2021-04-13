@@ -33,7 +33,7 @@ class MLPRegression(nn.Module):
 
     def __init__(self, input_size, hidden_size, target_size, depth):
         """
-        Multi-layer perceptron regression
+        Multi-layer perceptron regressor
 
         :param input_size: Size of input tensor
         :param hidden_size: Size of hidden layer
