@@ -10,16 +10,7 @@ import phe
 from XCrypt import xcrypt_2d
 from pickle import dumps, loads
 from threading import Thread
-
-
-def recv_large(sock):
-    data = b""
-    while True:
-        pack = sock.recv(1024)
-        data += pack
-        if data[-3:] == b"end":
-            break
-    return data[:-3]
+from GeneralFunc import recv_large, format_msg
 
 
 class Federator:
@@ -101,13 +92,10 @@ class Federator:
         Receiving PC from a client
 
         :param sock: the socket the connection is on
-        :param message: Message with CommStage PC_AGGREGATION, message body is PC header (length in bytes)
+        :param message: Message with CommStage PC_AGGREGATION, message body is encrypted PC
         :return:
         """
-        pc_header = message.message  # init msg 3
-        sock.send(b"OK")  # No.3
-        pc_msg = loads(sock.recv(pc_header))
-        pc = pc_msg.message
+        pc = message.message  # init msg 3
         self.pcs.append(pc)
         self.conns.add(sock)
 
@@ -157,9 +145,7 @@ class Federator:
         print("All clients connected.")
         for sock in self.all_sockets:
             # Send pk
-            sock.send(dumps(len(dumps(self.pk))))
-            sock.recv(2)  # No.2
-            sock.send(dumps(self.pk))
+            sock.send(format_msg(dumps(self.pk)))
             self.start_listen_thread(sock)
         print("Sent public key")
         self.state = CommStage.PC_INFO_EXCHANGE
@@ -187,24 +173,18 @@ class Federator:
         avg_pc = sum(self.pcs) / len(self.pcs)  # TODO: Could implement weighted pcs
         for sock in self.all_sockets:
             encrypted_pc = avg_pc
-            avg_pc_msg = dumps(Message(encrypted_pc, CommStage.PC_AGGREGATION))
-            avg_pc_header = dumps(len(avg_pc_msg))
-            sock.send(avg_pc_header)
-            sock.recv(2)  # No.4
+            avg_pc_msg = format_msg(dumps(Message(encrypted_pc, CommStage.PC_AGGREGATION)))
             sock.send(avg_pc_msg)
             sock.recv(2)  # No.5
         print("Sent average PC")
 
         # Model parameter distribution
-        # init_model = LinearRegression(len(avg_pc), 1)  # TODO: Make the model general
-        init_model = MLPRegression(len(avg_pc), 8, 1, 2)
+        init_model = LinearRegression(len(avg_pc), 1)  # TODO: Make the model general
+        # init_model = MLPRegression(len(avg_pc), 8, 1, 2)
         print("Length:", len(avg_pc))
         # TODO: Integrate optimizer and loss function into the message as well
-        init_model_msg = dumps(Message(dumps(init_model), CommStage.PARAM_DIST))
+        init_model_msg = format_msg(dumps(Message(dumps(init_model), CommStage.PARAM_DIST)))
         for sock in self.all_sockets:
-            # Send init_param, init_model
-            sock.send(dumps(len(init_model_msg)))
-            sock.recv(2)  # No.6
             sock.send(init_model_msg)
             sock.recv(2)  # No.6.5
             self.start_listen_thread(sock)
@@ -241,9 +221,9 @@ class Federator:
             grad_message = dumps(Message(client_grad_sums, CommStage.PARAM_DIST))
             bias_message = dumps(Message(client_bias_sums, CommStage.PARAM_DIST))
 
-            sock.send(grad_message+b"end")
+            sock.send(format_msg(grad_message))
             sock.recv(2)  # No.9.5
-            sock.send(bias_message+b"end")
+            sock.send(format_msg(bias_message))
             self.start_listen_thread(sock)
         self.grads = {}
         self.biases = {}
@@ -270,7 +250,7 @@ class Federator:
         :param sock: the socket the connection is on
         :return:
         """
-        listen_thread = Thread(target=self.single_proceed, args=(sock,))
+        listen_thread = Thread(target=self.single_proceed, args=(sock, ))
         listen_thread.start()
 
     def batch_proceed(self):
@@ -316,7 +296,7 @@ class Federator:
             single_thread = Thread(target=self.single_report, args=(sock, message))
 
         elif message.comm_stage == CommStage.END:
-            single_thread = Thread(target=self.single_end, args=(sock,))
+            single_thread = Thread(target=self.single_end, args=(sock, ))
 
         single_thread.start()
 
@@ -330,7 +310,7 @@ if __name__ == "__main__":
     while True:
 
         if len(fed.all_sockets) < fed.client_num and fed.state == CommStage.CONN_ESTAB:  # Collecting client connections
-            fed.sock.settimeout(0.00001)  # 0.1s timeout for "refreshing"
+            fed.sock.settimeout(0.00001)  # 0.00001s timeout for "refreshing"
             try:
                 conn, addr = fed.sock.accept()  # Accept new connections
                 print("Accepted connection from", addr)
@@ -344,4 +324,4 @@ if __name__ == "__main__":
             fed.sock.settimeout(None)
             thread = Thread(target=fed.batch_proceed)
             thread.start()
-            thread.join()  # Do NOT accept new connections until this process is done
+            thread.join()  # Do NOT accept new connections until this thread finishes
