@@ -37,7 +37,7 @@ class Client:
         self.sock.send(message)
 
     def recv(self, size):
-        message = self.sock.recv(size)  # In bytes
+        message = self.sock.recv(size)
         return message
 
     def recv_large(self):

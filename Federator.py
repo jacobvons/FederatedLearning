@@ -186,8 +186,8 @@ class Federator:
         print("Sent average PC")
 
         # Model parameter distribution
-        init_model = LinearRegression(len(avg_pc), 1)  # TODO: Make the model general
-        # init_model = MLPRegression(len(avg_pc), 8, 1, 2)
+        # init_model = LinearRegression(len(avg_pc), 1)  # TODO: Make the model general
+        init_model = MLPRegression(len(avg_pc), 8, 1, 2)
         print("Length:", len(avg_pc))
         # TODO: Integrate optimizer and loss function into the message as well
         init_model_msg = format_msg(dumps(Message(dumps(init_model), CommStage.PARAM_DIST)))
