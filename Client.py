@@ -27,6 +27,7 @@ class Client:
         self.pk, self.sk = phe.paillier.generate_paillier_keypair()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.client_num = 0
+        self.current_round = 1
 
     def connect(self):
         self.sock.connect((self.host, self.port))
@@ -54,11 +55,9 @@ class Client:
         init_msg = Message(self.pk, CommStage.CONN_ESTAB)  # init msg 1
         self.send(format_msg(dumps(init_msg)))  # Fed: message = loads(sock.recv(2048))
         # Receive client_num and explain_ratio
-        combination = float(self.recv(10).decode("utf-8"))
-        self.client_num = int(combination)
-        explain_ratio = round(combination - int(combination), 2)
+        self.client_num, self.explain_ratio, self.comm_rounds = loads(self.recv_large())
         print(self.client_num, "clients in total.")
-        print(f"Want to explain {round(explain_ratio * 100, 2)}% of data.")
+        print(f"Want to explain {round(self.explain_ratio * 100, 2)}% of data.")
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Find number of pc for this client and report OK to federator
@@ -79,7 +78,7 @@ class Client:
         pca = PCA(n_components=5)
         while True:
             pca.fit(X_train)
-            if sum(pca.explained_variance_ratio_) >= explain_ratio:
+            if sum(pca.explained_variance_ratio_) >= self.explain_ratio:
                 pc_num = len(pca.components_)
                 break
             else:
@@ -141,10 +140,12 @@ class Client:
         self.send(b"OK")  # No.6.5
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # Reporting stage (batch)
-        for _ in range(1):  # TODO: Number of communication rounds
+        # Reporting stage
+        for _ in range(self.comm_rounds):  # TODO: Number of communication rounds
             model = torch.load(f"./client{self.client_id}/client{self.client_id}_initial_model.pt")
-            # Training
+
+            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            # Training stage (Local)
             # TODO: Receive optimizer and loss function from Federator as well
             optimizer = optim.SGD(model.parameters(), lr=0.01)
             loss_func = nn.MSELoss()
@@ -170,7 +171,7 @@ class Client:
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # Report stage (single)
             print("Sending updates")
-            report_start_msg = Message(len(model_grads), CommStage.REPORT)
+            report_start_msg = Message([len(model_grads), self.current_round], CommStage.REPORT)
             self.send(format_msg(dumps(report_start_msg)))  # init msg 4
             print(f"Sending {len(model_grads)} trainable layers")
             for i in range(len(model_grads)):
@@ -202,6 +203,7 @@ class Client:
 
             torch.save(model, f"./client{self.client_id}/client{self.client_id}_model.pt")
             print("New model saved.")
+            self.current_round += 1
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # End stage (single)
