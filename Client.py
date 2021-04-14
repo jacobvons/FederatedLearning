@@ -149,9 +149,11 @@ class Client:
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Reporting stage
+        print(f"{self.comm_rounds} communication rounds in total")
         for _ in range(self.comm_rounds):  # Communication rounds
+            print(f"Round {self.current_round}")
             model.train()
-            loader = DataLoader(train_dataset, shuffle=True, batch_size=10)
+            loader = DataLoader(train_dataset, shuffle=True, batch_size=10)  # TODO: Pass batch size as parameter
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # Training (Local)
             for n in range(self.epoch_num):  # Training epochs
@@ -161,7 +163,7 @@ class Client:
                     loss = 0
                     for j in range(len(X)):  # Calculate on a mini-batch
                         prediction = model(reduced_X_train[i])
-                        loss += loss_func(prediction, y_train[i])
+                        loss += loss_func(prediction[0], y_train[i])
                     loss /= len(X)  # Mean loss to do back prop
                     loss.backward()
                     optimizer.step()  # Update grad and bias for each mini-batch
@@ -204,16 +206,23 @@ class Client:
             self.send(b"OK")  # No.9.5
             new_biases = loads(self.recv_large()).message
 
+            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            # Update model (Local)
+            print("Updating  local model")
             for i in range(len(model.layers)):
                 layer = model.layers[i]
                 new_layer_grad = xcrypt_2d(self.sk.decrypt, new_grads[i], self.xcrypt)
                 new_layer_bias = xcrypt_2d(self.sk.decrypt, new_biases[i], self.xcrypt)
                 with torch.no_grad():
                     layer.weight.data = torch.from_numpy(new_layer_grad)
-                    layer.bias.data = torch.from_numpy(new_layer_bias)
+                    if not self.xcrypt:  # TODO: Test whether this works generically
+                        layer.bias.data = torch.from_numpy(new_layer_bias)
+                    else:
+                        layer.bias.data = torch.from_numpy(new_layer_bias)[0]
 
             torch.save(model, f"./client{self.client_id}/client{self.client_id}_model.pt")
             print("New model saved.")
+            print(f"Round {self.current_round} finished")
             self.current_round += 1
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
