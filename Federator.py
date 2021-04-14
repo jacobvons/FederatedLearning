@@ -7,6 +7,8 @@ from CommStage import CommStage
 from Model import LinearRegression
 from Model import MLPRegression
 import torch
+import torch.nn as nn
+import torch.optim as optim
 import phe
 from XCrypt import xcrypt_2d
 from pickle import dumps, loads
@@ -178,7 +180,7 @@ class Federator:
         :return:
         """
         self.reset_conns()
-        avg_pc = sum(self.pcs) / len(self.pcs)  # TODO: Could implement weighted pcs
+        avg_pc = sum(self.pcs) / len(self.pcs)  # TODO: Implement weighted pcs
         for sock in self.all_sockets:
             encrypted_pc = avg_pc
             avg_pc_msg = format_msg(dumps(Message(encrypted_pc, CommStage.PC_AGGREGATION)))
@@ -189,9 +191,11 @@ class Federator:
         # Model parameter distribution
         # init_model = LinearRegression(len(avg_pc), 1)  # TODO: Make the model general
         init_model = MLPRegression(len(avg_pc), 8, 1, 2)
+        optimizer = optim.SGD(init_model.parameters(), lr=0.01)  # TODO: Tune hyper-parameters
+        loss_func = nn.MSELoss()
         print("Length:", len(avg_pc))
         # TODO: Integrate optimizer and loss function into the message as well
-        init_model_msg = format_msg(dumps(Message(dumps(init_model), CommStage.PARAM_DIST)))
+        init_model_msg = format_msg(dumps(Message([init_model, optimizer, loss_func], CommStage.PARAM_DIST)))
         for sock in self.all_sockets:
             sock.send(init_model_msg)
             sock.recv(2)  # No.6.5
