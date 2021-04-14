@@ -143,16 +143,13 @@ class Client:
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Reporting stage
-        for _ in range(self.comm_rounds):  # TODO: Number of communication rounds
+        for _ in range(self.comm_rounds):
             model = torch.load(f"./client{self.client_id}/client{self.client_id}_initial_model.pt")
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # Training stage (Local)
-            # TODO: Receive optimizer and loss function from Federator as well
-            # optimizer = optim.SGD(model.parameters(), lr=0.01)
-            # loss_func = nn.MSELoss()
             model.train()
-            for i in range(len(reduced_X_train)):
+            for i in range(len(reduced_X_train)):  # TODO: Implement mini-batch training
                 optimizer.zero_grad()
                 prediction = model(reduced_X_train[i])
 
