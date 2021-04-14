@@ -236,11 +236,13 @@ class Federator:
             sock.send(format_msg(grad_message))
             sock.recv(2)  # No.9.5
             sock.send(format_msg(bias_message))
-            self.start_listen_thread(sock)
         self.grads = {}
         self.biases = {}
         if self.current_round == self.comm_rounds:
             self.state = CommStage.END
+
+        for sock in self.all_sockets:
+            self.start_listen_thread(sock)
 
     def batch_end(self):
         """
@@ -251,6 +253,7 @@ class Federator:
         self.reset_conns()
         for sock in self.all_sockets:
             sock.send(b"OK")  # No.11
+            sock.shutdown(2)
             sock.close()
             print(f"Connection to {sock} closed")
         self.reset()
