@@ -136,7 +136,7 @@ class Client:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Receive initial model stage (single)
         model_msg = self.recv_large()
-        model = loads(loads(model_msg).message)
+        model, optimizer, loss_func = loads(model_msg).message
         torch.save(model, f"./client{self.client_id}/client{self.client_id}_initial_model.pt")
         print("Received model message")
         self.send(b"OK")  # No.6.5
@@ -149,8 +149,8 @@ class Client:
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # Training stage (Local)
             # TODO: Receive optimizer and loss function from Federator as well
-            optimizer = optim.SGD(model.parameters(), lr=0.01)
-            loss_func = nn.MSELoss()
+            # optimizer = optim.SGD(model.parameters(), lr=0.01)
+            # loss_func = nn.MSELoss()
             model.train()
             for i in range(len(reduced_X_train)):
                 optimizer.zero_grad()
