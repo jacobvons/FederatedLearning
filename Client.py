@@ -9,12 +9,12 @@ import phe
 from Message import Message
 from CommStage import CommStage
 import torch
+import torch.nn as nn
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
 from sklearn.decomposition import PCA
 from XCrypt import xcrypt_2d
-import torch.nn as nn
-import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
 from GeneralFunc import format_msg
 
 
@@ -57,7 +57,7 @@ class Client:
         init_msg = Message(self.pk, CommStage.CONN_ESTAB)  # init msg 1
         self.send(format_msg(dumps(init_msg)))  # Fed: message = loads(sock.recv(2048))
         # Receive client_num and explain_ratio
-        self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt = loads(self.recv_large())
+        self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num = loads(self.recv_large())
         print(self.client_num, "clients in total.")
         print(f"Want to explain {round(self.explain_ratio * 100, 2)}% of data.")
 
@@ -131,7 +131,13 @@ class Client:
         np.save(f"./client{self.client_id}/reduced_X_test.npy", reduced_X_test)
         print("Reduced dimensionality of original data")
         reduced_X_train = torch.from_numpy(reduced_X_train)
+        reduced_X_test = torch.from_numpy(reduced_X_test)
         y_train = torch.from_numpy(y_train)
+        y_test = torch.from_numpy(y_test)
+        train_dataset = TensorDataset(reduced_X_train, y_train)
+        test_dataset = TensorDataset(reduced_X_test, y_test)
+        torch.save(train_dataset, f"./client{self.client_id}/train_dataset.pt")
+        torch.save(test_dataset, f"./client{self.client_id}/test_dataset.pt")
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Receive initial model stage (single)
@@ -143,19 +149,22 @@ class Client:
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Reporting stage
-        for _ in range(self.comm_rounds):
-            model = torch.load(f"./client{self.client_id}/client{self.client_id}_initial_model.pt")
-
-            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            # Training stage (Local)
+        for _ in range(self.comm_rounds):  # Communication rounds
             model.train()
-            for i in range(len(reduced_X_train)):  # TODO: Implement mini-batch training
-                optimizer.zero_grad()
-                prediction = model(reduced_X_train[i])
-
-                loss = loss_func(prediction, y_train[i])
-                loss.backward()
-                optimizer.step()
+            loader = DataLoader(train_dataset, shuffle=True, batch_size=10)
+            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            # Training (Local)
+            for n in range(self.epoch_num):  # Training epochs
+                print(f"Epoch {n+1}/{self.epoch_num}")
+                for i, (X, y) in enumerate(loader):  # Mini-batches
+                    optimizer.zero_grad()
+                    loss = 0
+                    for j in range(len(X)):  # Calculate on a mini-batch
+                        prediction = model(reduced_X_train[i])
+                        loss += loss_func(prediction, y_train[i])
+                    loss /= len(X)  # Mean loss to do back prop
+                    loss.backward()
+                    optimizer.step()  # Update grad and bias for each mini-batch
             print("Done training")
 
             model_grads = []
