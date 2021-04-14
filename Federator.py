@@ -18,7 +18,7 @@ from GeneralFunc import recv_large, format_msg
 
 class Federator:
 
-    def __init__(self, host, port, client_num, comm_rounds, explain_ratio, xcrypt):
+    def __init__(self, host, port, client_num, comm_rounds, explain_ratio, xcrypt, epoch_num):
         self.host = host
         self.port = port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -32,6 +32,7 @@ class Federator:
         self.client_num = client_num
         self.comm_rounds = comm_rounds
         self.explain_ratio = explain_ratio
+        self.epoch_num = epoch_num
         self.conns = set()
         self.state = CommStage.CONN_ESTAB
         self.grads = {}
@@ -78,7 +79,7 @@ class Federator:
         """
         self.client_pks[sock] = message.message  # init msg 1
         # Send client num and explain ratio
-        sock.send(format_msg(dumps([self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt])))
+        sock.send(format_msg(dumps([self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num])))
         sock.recv(2)  # No.1
         print("Waiting to get all clients")
         self.conns.add(sock)
@@ -324,6 +325,7 @@ if __name__ == "__main__":
     --rounds: communication rounds, default 1
     --ratio: explain ratio, must be float, default 0.85
     --x: xcrypt or not, 1 or 0, default 1
+    --e: number of epochs for each communication round, default 1 epoch
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--h")
@@ -332,6 +334,7 @@ if __name__ == "__main__":
     parser.add_argument("--rounds")
     parser.add_argument("--ratio")
     parser.add_argument("--x")
+    parser.add_argument("--e")
     args = parser.parse_args()
 
     host = args.h
@@ -340,7 +343,8 @@ if __name__ == "__main__":
     training_rounds = int(args.rounds) if args.rounds else 1
     explain_ratio = float(args.ratio) if args.ratio else 0.85
     xcrypt = bool(int(args.x)) if args.x else True
-    fed = Federator(host, port, client_num, training_rounds, explain_ratio, xcrypt)
+    epoch_num = int(args.e) if args.e else 1
+    fed = Federator(host, port, client_num, training_rounds, explain_ratio, xcrypt, epoch_num)
     torch.set_default_dtype(torch.float64)
 
     while True:

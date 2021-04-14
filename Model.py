@@ -11,7 +11,7 @@ class LinearRegression(nn.Module):
         Linear Regression module
 
         :param input_size: Dimensionality of the input array
-        :param depth: Number of layers that needs gradients and biases
+        :param depth: Number of trainable layers (ones need grads and biases)
         """
         super().__init__()
         self.depth = depth
