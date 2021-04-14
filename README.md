@@ -2,7 +2,7 @@
 This is my Honours year research project on federated learning with my supervisor Prof Amanda Barnard and in collaboration with Choiceflows. 
 
 # Goal
-The goal of this project is to provide a Python package in federated learning (FL) that's compatiple with existing machine learning (ML) packages in Python (currently, I'm using PyTorch).
+The goal of this project is to provide a Python package in federated learning (FL) that's compatiple with existing machine learning (ML) packages in Python (currently I'm using PyTorch).
 
 # Use
 Currently the package is under development. However, demonstration of the package in a local environment can be run as follows:
