@@ -1,7 +1,5 @@
 import socket
 import argparse
-import sys
-import numpy as np
 from Message import Message
 from CommStage import CommStage
 from Model import LinearRegression
@@ -9,11 +7,11 @@ from Model import MLPRegression
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import phe
-from XCrypt import xcrypt_2d
 from pickle import dumps, loads
 from threading import Thread
 from GeneralFunc import recv_large, format_msg
+from Crypto.PublicKey import RSA
+from XCrypt import seg_decrypt, seg_encrypt
 
 
 class Federator:
@@ -22,7 +20,9 @@ class Federator:
         self.host = host
         self.port = port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.pk, self.sk = phe.paillier.generate_paillier_keypair()
+        self.sk = RSA.generate(2048)
+        self.pk = self.sk.publickey()
+
         self.sock.bind((host, port))
         self.sock.listen()
         print('listening on', (host, port))
@@ -77,7 +77,7 @@ class Federator:
         :param message: Message with CommStage CONN_ESTAB, message body is client public key
         :return:
         """
-        self.client_pks[sock] = message.message  # init msg 1
+        self.client_pks[sock] = RSA.import_key(message.message)  # init msg 1
         # Send client num and explain ratio
         sock.send(format_msg(dumps([self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num])))
         sock.recv(2)  # No.1
@@ -122,9 +122,9 @@ class Federator:
         print(f"communication round {current_round}")
         self.current_round = current_round
         for i in range(num_layers):
-            grad = loads(recv_large(sock))  # np.array of encrypted number
+            grad = recv_large(sock)
             sock.send(b"OK")  # No.7.5
-            bias = loads(recv_large(sock))  # np.array of encrypted number
+            bias = recv_large(sock)
             if sock not in self.grads.keys():
                 self.grads[sock] = []
                 self.biases[sock] = []
@@ -154,9 +154,10 @@ class Federator:
         """
         self.reset_conns()
         print("All clients connected.")
+        pk_pem = self.pk.exportKey()
         for sock in self.all_sockets:
             # Send pk
-            sock.send(format_msg(dumps(self.pk)))
+            sock.send(format_msg(dumps(pk_pem)))
             self.start_listen_thread(sock)
         print("Sent public key")
         self.state = CommStage.PC_INFO_EXCHANGE
@@ -214,9 +215,8 @@ class Federator:
         grad_sums = []
         bias_sums = []
         for sock in self.all_sockets:
-            # layer * m * n arrays
-            client_grads = [xcrypt_2d(self.sk.decrypt, g, self.xcrypt) for g in self.grads[sock]]
-            client_biases = [xcrypt_2d(self.sk.decrypt, b, self.xcrypt) for b in self.biases[sock]]
+            client_grads = [seg_decrypt(g, self.sk, self.xcrypt) for g in self.grads[sock]]
+            client_biases = [seg_decrypt(b, self.sk, self.xcrypt, True) for b in self.biases[sock]]
 
             if not len(grad_sums):
                 grad_sums = client_grads
@@ -227,8 +227,8 @@ class Federator:
 
         for sock in self.all_sockets:
             client_pk = self.client_pks[sock]
-            client_grad_sums = [xcrypt_2d(client_pk.encrypt, g, self.xcrypt) for g in grad_sums]
-            client_bias_sums = [xcrypt_2d(client_pk.encrypt, b, self.xcrypt) for b in bias_sums]
+            client_grad_sums = [seg_encrypt(g, client_pk, self.xcrypt) for g in grad_sums]
+            client_bias_sums = [seg_encrypt(b, client_pk, self.xcrypt) for b in bias_sums]
 
             grad_message = dumps(Message(client_grad_sums, CommStage.PARAM_DIST))
             bias_message = dumps(Message(client_bias_sums, CommStage.PARAM_DIST))
