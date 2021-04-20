@@ -124,13 +124,16 @@ class Federator:
         for i in range(num_layers):
             grad = recv_large(sock)
             sock.send(b"OK")  # No.7.5
-            bias = recv_large(sock)
             if sock not in self.grads.keys():
                 self.grads[sock] = []
                 self.biases[sock] = []
             self.grads[sock].append(grad)
+
+        for i in range(num_layers):
+            bias = recv_large(sock)
             self.biases[sock].append(bias)
             sock.send(b"OK")  # No.8.5
+
         sock.recv(2)  # No.8.75
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", "\n")
         self.conns.add(sock)
@@ -158,7 +161,7 @@ class Federator:
         for sock in self.all_sockets:
             # Send pk
             sock.send(format_msg(dumps(pk_pem)))
-            self.start_listen_thread(sock)
+            self.single_proceed(sock)
         print("Sent public key")
         self.state = CommStage.PC_INFO_EXCHANGE
 
@@ -172,7 +175,7 @@ class Federator:
         max_pc_num = max(self.pc_nums)
         for sock in self.all_sockets:
             sock.send(dumps(max_pc_num))
-            self.start_listen_thread(sock)
+            self.single_proceed(sock)
         self.state = CommStage.PC_AGGREGATION
 
     def batch_pc_aggregation(self):
@@ -200,7 +203,7 @@ class Federator:
         for sock in self.all_sockets:
             sock.send(init_model_msg)
             sock.recv(2)  # No.6.5
-            self.start_listen_thread(sock)
+            self.single_proceed(sock)
         self.state = CommStage.REPORT
 
     def batch_report(self):
@@ -242,7 +245,7 @@ class Federator:
             self.state = CommStage.END
 
         for sock in self.all_sockets:
-            self.start_listen_thread(sock)
+            self.single_proceed(sock)
 
     def batch_end(self):
         """
@@ -259,16 +262,6 @@ class Federator:
         self.reset()
 
     # Proceeding methods
-    def start_listen_thread(self, sock):
-        """
-        Start a thread for processing a single socket connection
-
-        :param sock: the socket the connection is on
-        :return:
-        """
-        listen_thread = Thread(target=self.single_proceed, args=(sock, ))
-        listen_thread.start()
-
     def batch_proceed(self):
         """
         Process all clients based on the communication stage
@@ -315,6 +308,7 @@ class Federator:
             single_thread = Thread(target=self.single_end, args=(sock, ))
 
         single_thread.start()
+        single_thread.join()  # Didn't help
 
 
 if __name__ == "__main__":

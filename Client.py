@@ -189,14 +189,16 @@ class Client:
             print(f"Sending {len(model_grads)} trainable layers")
             for i in range(len(model_grads)):
                 model_grad = model_grads[i]
-                model_bias = model_biases[i]
-
                 self.send(format_msg(model_grad))
-                print("Sent grad")
                 self.recv(2)  # No.7.5
+                print("Sent grad")
+
+            for i in range(len(model_biases)):
+                model_bias = model_biases[i]
                 self.send(format_msg(model_bias))
-                print("Sent bias")
                 self.recv(2)  # No.8.5
+                print("Sent bias")
+
             self.send(b"OK")  # No.8.75
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -217,8 +219,6 @@ class Client:
                 with torch.no_grad():
                     layer.weight.data = torch.from_numpy(new_layer_grad)
                     layer.bias.data = torch.from_numpy(new_layer_bias)
-                print(new_layer_grad)
-                print(new_layer_bias)
             torch.save(model, f"./client{self.client_id}/client{self.client_id}_model.pt")
             print("New model saved.")
             print(f"Round {self.current_round} finished")
