@@ -47,7 +47,7 @@ class Client:
     def recv_large(self):
         data = b""
         while True:
-            pack = self.recv(1024)
+            pack = self.recv(10)
             data += pack
             if data[-3:] == b"end":
                 break

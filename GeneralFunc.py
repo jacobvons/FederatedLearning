@@ -4,7 +4,7 @@ import numpy as np
 def recv_large(sock):
     data = b""
     while True:
-        pack = sock.recv(1024)
+        pack = sock.recv(10)
         data += pack
         if data[-3:] == b"end":
             break
