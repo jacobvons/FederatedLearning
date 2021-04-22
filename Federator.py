@@ -1,3 +1,4 @@
+import math
 import socket
 import argparse
 from Message import Message
@@ -12,6 +13,8 @@ from threading import Thread
 from GeneralFunc import recv_large, format_msg
 from Crypto.PublicKey import RSA
 from XCrypt import seg_decrypt, seg_encrypt
+import time
+import select
 
 
 class Federator:
@@ -42,6 +45,7 @@ class Federator:
         self.pcs = []
         self.current_round = 1
         self.xcrypt = xcrypt
+        self.threads = []
 
     def reset(self):
         """
@@ -59,6 +63,7 @@ class Federator:
         self.pc_nums = []
         self.pcs = []
         self.current_round = 1
+        self.threads = []
 
     def reset_conns(self):
         """
@@ -84,6 +89,7 @@ class Federator:
         print("Waiting to get all clients")
         self.conns.add(sock)
         self.all_sockets.append(sock)
+        self.threads = []
 
     def single_pc_info_exchange(self, sock, message):
         """
@@ -121,16 +127,18 @@ class Federator:
         print(f"{num_layers} trainable layers in total")
         print(f"communication round {current_round}")
         self.current_round = current_round
-        for i in range(num_layers):
-            grad = recv_large(sock)
-            sock.send(b"OK")  # No.7.5
-            if sock not in self.grads.keys():
-                self.grads[sock] = []
-                self.biases[sock] = []
-            self.grads[sock].append(grad)
+
+        if sock not in self.grads.keys():
+            self.grads[sock] = []
+            self.biases[sock] = []
 
         for i in range(num_layers):
-            bias = recv_large(sock)
+            grad = loads(recv_large(sock))
+            self.grads[sock].append(grad)
+            sock.send(b"OK")  # No.7.5
+
+        for i in range(num_layers):
+            bias = loads(recv_large(sock))
             self.biases[sock].append(bias)
             sock.send(b"OK")  # No.8.5
 
@@ -146,6 +154,7 @@ class Federator:
         :return:
         """
         print(f"To close connection with {sock}")
+        self.state = CommStage.END
         self.conns.add(sock)
 
     # Batch methods
@@ -163,6 +172,8 @@ class Federator:
             sock.send(format_msg(dumps(pk_pem)))
             self.single_proceed(sock)
         print("Sent public key")
+        for t in self.threads:
+            t.join()
         self.state = CommStage.PC_INFO_EXCHANGE
 
     def batch_pc_info_exchange(self):
@@ -176,6 +187,8 @@ class Federator:
         for sock in self.all_sockets:
             sock.send(dumps(max_pc_num))
             self.single_proceed(sock)
+        for t in self.threads:
+            t.join()
         self.state = CommStage.PC_AGGREGATION
 
     def batch_pc_aggregation(self):
@@ -204,6 +217,8 @@ class Federator:
             sock.send(init_model_msg)
             sock.recv(2)  # No.6.5
             self.single_proceed(sock)
+        for t in self.threads:
+            t.join()
         self.state = CommStage.REPORT
 
     def batch_report(self):
@@ -241,11 +256,11 @@ class Federator:
             sock.send(format_msg(bias_message))
         self.grads = {}
         self.biases = {}
-        if self.current_round == self.comm_rounds:
-            self.state = CommStage.END
 
         for sock in self.all_sockets:
             self.single_proceed(sock)
+        for t in self.threads:
+            t.join()
 
     def batch_end(self):
         """
@@ -282,6 +297,7 @@ class Federator:
 
         elif self.state == CommStage.END:
             self.batch_end()
+        self.threads = []
 
     def single_proceed(self, sock):
         """
@@ -308,7 +324,8 @@ class Federator:
             single_thread = Thread(target=self.single_end, args=(sock, ))
 
         single_thread.start()
-        single_thread.join()  # Didn't help
+        self.threads.append(single_thread)
+        # single_thread.join()  # Didn't help
 
 
 if __name__ == "__main__":
@@ -338,7 +355,7 @@ if __name__ == "__main__":
     port = int(args.p)
     client_num = int(args.n)
     training_rounds = int(args.rounds) if args.rounds else 1
-    explain_ratio = float(args.ratio) if args.ratio else 0.85
+    explain_ratio = min(1.0, float(args.ratio)) if args.ratio else 0.85
     xcrypt = bool(int(args.x)) if args.x else True
     epoch_num = int(args.e) if args.e else 1
     fed = Federator(host, port, client_num, training_rounds, explain_ratio, xcrypt, epoch_num)

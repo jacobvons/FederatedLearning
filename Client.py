@@ -14,6 +14,8 @@ from torch.utils.data import DataLoader, TensorDataset
 from GeneralFunc import format_msg
 from Crypto.PublicKey import RSA
 from XCrypt import seg_encrypt, seg_decrypt
+import time
+import select
 
 
 class Client:
@@ -174,9 +176,8 @@ class Client:
             model_biases = []
             print("Encrypting model message")
             for layer in model.layers:
-                # Already in bytes form, no need to dump again
-                grad = seg_encrypt(np.array(layer.weight.data, dtype="float64"), self.fed_pk, self.xcrypt)
-                bias = seg_encrypt(np.array(layer.bias.data, dtype="float64"), self.fed_pk, self.xcrypt)
+                grad = dumps(seg_encrypt(np.array(layer.weight.data, dtype="float64"), self.fed_pk, self.xcrypt))
+                bias = dumps(seg_encrypt(np.array(layer.bias.data, dtype="float64"), self.fed_pk, self.xcrypt))
 
                 model_grads.append(grad)
                 model_biases.append(bias)
@@ -219,7 +220,7 @@ class Client:
                 with torch.no_grad():
                     layer.weight.data = torch.from_numpy(new_layer_grad)
                     layer.bias.data = torch.from_numpy(new_layer_bias)
-            torch.save(model, f"./client{self.client_id}/client{self.client_id}_model.pt")
+            torch.save(model, f"./client{self.client_id}/client{self.client_id}_model{self.current_round}.pt")
             print("New model saved.")
             print(f"Round {self.current_round} finished")
             self.current_round += 1
@@ -254,10 +255,15 @@ if __name__ == "__main__":
     parser.add_argument("--i")
     args = parser.parse_args()
 
-    host = args.h
-    port = int(args.p)
-    path = args.path
-    client_id = args.i
+    # host = args.h
+    # port = int(args.p)
+    # path = args.path
+    # client_id = args.i
+
+    host = "127.0.0.1"
+    port = 65432
+    path = "../dataset/Ag-quantum.csv"
+    client_id = 2
 
     torch.set_default_dtype(torch.float64)
 
