@@ -1,21 +1,21 @@
 import socket
 import argparse
 from pickle import dumps, loads
-import sys
 import os
 import numpy as np
 import pandas as pd
-import phe
 from Message import Message
 from CommStage import CommStage
 import torch
-import torch.nn as nn
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
 from sklearn.decomposition import PCA
-from XCrypt import xcrypt_2d
 from torch.utils.data import DataLoader, TensorDataset
 from GeneralFunc import format_msg
+from Crypto.PublicKey import RSA
+from XCrypt import seg_encrypt, seg_decrypt
+import time
+import select
 
 
 class Client:
@@ -25,7 +25,9 @@ class Client:
         self.host = host
         self.port = port
         self.fed_pk = None
-        self.pk, self.sk = phe.paillier.generate_paillier_keypair()
+        self.sk = RSA.generate(2048)
+        self.pk = self.sk.publickey()
+
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.client_num = 0
         self.current_round = 1
@@ -45,7 +47,7 @@ class Client:
     def recv_large(self):
         data = b""
         while True:
-            pack = self.recv(1024)
+            pack = self.recv(10)
             data += pack
             if data[-3:] == b"end":
                 break
@@ -54,8 +56,9 @@ class Client:
     def work(self, path):
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Connection establishment stage (single)
-        init_msg = Message(self.pk, CommStage.CONN_ESTAB)  # init msg 1
-        self.send(format_msg(dumps(init_msg)))  # Fed: message = loads(sock.recv(2048))
+        pk_pem = self.pk.exportKey()
+        init_msg = Message(pk_pem, CommStage.CONN_ESTAB)
+        self.send(format_msg(dumps(init_msg)))  # init msg 1
         # Receive client_num and explain_ratio
         self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num = loads(self.recv_large())
         print(self.client_num, "clients in total.")
@@ -91,7 +94,7 @@ class Client:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Conn establish (batch)
         # Receive Federator public key
-        self.fed_pk = loads(self.recv_large())
+        self.fed_pk = RSA.import_key(loads(self.recv_large()))
         print("Received Federator public key")
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -173,11 +176,9 @@ class Client:
             model_biases = []
             print("Encrypting model message")
             for layer in model.layers:
-                grad = dumps(xcrypt_2d(self.fed_pk.encrypt, np.array(layer.weight.data, dtype="float64"), self.xcrypt))
-                if self.xcrypt:
-                    bias = dumps(np.array(list(map(self.fed_pk.encrypt, np.array(layer.bias.data, dtype="float64")))))
-                else:
-                    bias = dumps(np.array(layer.bias.data, dtype="float64"))
+                grad = dumps(seg_encrypt(np.array(layer.weight.data, dtype="float64"), self.fed_pk, self.xcrypt))
+                bias = dumps(seg_encrypt(np.array(layer.bias.data, dtype="float64"), self.fed_pk, self.xcrypt))
+
                 model_grads.append(grad)
                 model_biases.append(bias)
 
@@ -189,14 +190,16 @@ class Client:
             print(f"Sending {len(model_grads)} trainable layers")
             for i in range(len(model_grads)):
                 model_grad = model_grads[i]
-                model_bias = model_biases[i]
-
                 self.send(format_msg(model_grad))
-                print("Sent grad")
                 self.recv(2)  # No.7.5
+                print("Sent grad")
+
+            for i in range(len(model_biases)):
+                model_bias = model_biases[i]
                 self.send(format_msg(model_bias))
-                print("Sent bias")
                 self.recv(2)  # No.8.5
+                print("Sent bias")
+
             self.send(b"OK")  # No.8.75
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -211,16 +214,13 @@ class Client:
             print("Updating  local model")
             for i in range(len(model.layers)):
                 layer = model.layers[i]
-                new_layer_grad = xcrypt_2d(self.sk.decrypt, new_grads[i], self.xcrypt)
-                new_layer_bias = xcrypt_2d(self.sk.decrypt, new_biases[i], self.xcrypt)
+                new_layer_grad = seg_decrypt(new_grads[i], self.sk, self.xcrypt)
+                new_layer_bias = seg_decrypt(new_biases[i], self.sk, self.xcrypt, True)
+
                 with torch.no_grad():
                     layer.weight.data = torch.from_numpy(new_layer_grad)
-                    if not self.xcrypt:  # TODO: Test whether this works generically
-                        layer.bias.data = torch.from_numpy(new_layer_bias)
-                    else:
-                        layer.bias.data = torch.from_numpy(new_layer_bias)[0]
-
-            torch.save(model, f"./client{self.client_id}/client{self.client_id}_model.pt")
+                    layer.bias.data = torch.from_numpy(new_layer_bias)
+            torch.save(model, f"./client{self.client_id}/client{self.client_id}_model{self.current_round}.pt")
             print("New model saved.")
             print(f"Round {self.current_round} finished")
             self.current_round += 1
@@ -255,10 +255,15 @@ if __name__ == "__main__":
     parser.add_argument("--i")
     args = parser.parse_args()
 
-    host = args.h
-    port = int(args.p)
-    path = args.path
-    client_id = args.i
+    # host = args.h
+    # port = int(args.p)
+    # path = args.path
+    # client_id = args.i
+
+    host = "127.0.0.1"
+    port = 65432
+    path = "../dataset/Ag-quantum.csv"
+    client_id = 2
 
     torch.set_default_dtype(torch.float64)
 
