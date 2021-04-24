@@ -2,6 +2,12 @@ import numpy as np
 
 
 def recv_large(sock):
+    """
+    Receive a large formatted message from a socket and return it
+
+    :param sock: the socket used for receiving
+    :return: raw bytes message with the bytes ending b"end" stripped
+    """
     data = b""
     while True:
         pack = sock.recv(10)
@@ -11,8 +17,14 @@ def recv_large(sock):
     return data[:-3]
 
 
-def format_msg(binary_msg):
-    return binary_msg + b"end"
+def format_msg(bytes_msg):
+    """
+    Formatting a bytes message with a b"end" ending
+
+    :param bytes_msg: the bytes message that needs formatting
+    :return: bytes message with b"end" at the end
+    """
+    return bytes_msg + b"end"
 
 
 def stringify(arr):

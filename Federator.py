@@ -1,10 +1,8 @@
-import math
 import socket
 import argparse
 from Message import Message
 from CommStage import CommStage
-from Model import LinearRegression
-from Model import MLPRegression
+from Model import LinearRegression, MLPRegression
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -13,13 +11,22 @@ from threading import Thread
 from GeneralFunc import recv_large, format_msg
 from Crypto.PublicKey import RSA
 from XCrypt import seg_decrypt, seg_encrypt
-import time
-import select
 
 
 class Federator:
 
     def __init__(self, host, port, client_num, comm_rounds, explain_ratio, xcrypt, epoch_num):
+        """
+        Initialise a Federator instance
+
+        :param host: str, address the Federator is deployed on
+        :param port: int, port the Federator is listening to
+        :param client_num: int greater or equal to 1, number of expected client connections
+        :param comm_rounds: int greater than 1, number of rounds of Federator-Client communication
+        :param explain_ratio: float between 0 and 1, expected explain ratio for PCA
+        :param xcrypt: int 1 or 0, for doing and not doing encryption during communication
+        :param epoch_num: int greater or equal to 1, number of epochs for each training round
+        """
         self.host = host
         self.port = port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -325,7 +332,6 @@ class Federator:
 
         single_thread.start()
         self.threads.append(single_thread)
-        # single_thread.join()  # Didn't help
 
 
 if __name__ == "__main__":

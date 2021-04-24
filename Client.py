@@ -14,8 +14,6 @@ from torch.utils.data import DataLoader, TensorDataset
 from GeneralFunc import format_msg
 from Crypto.PublicKey import RSA
 from XCrypt import seg_encrypt, seg_decrypt
-import time
-import select
 
 
 class Client:
