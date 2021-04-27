@@ -1,18 +1,19 @@
 # Collaborative Computation using Federated Learning
-This is my Honours year research project on federated learning with my supervisor Prof Amanda Barnard and in collaboration with Choiceflows. 
+## Acknowledgement
+This is my Honours year (2021) research project on federated learning with my supervisor [Prof Amanda Barnard](https://cs.anu.edu.au/people/amanda-barnard) at the [ANU](https://www.anu.edu.au).
 
-# Background Literatures
+## Background Literatures
 1. [Communication-Efficient Learning of Deep Networks from Decentralized Data](http://proceedings.mlr.press/v54/mcmahan17a/mcmahan17a.pdf)
 2. [Advances and open problems in federated learning](https://arxiv.org/pdf/1912.04977.pdf)
 3. [Federated learning: Challenges, methods, and future directions](https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=9084352)
 4. To be added...
 
-# Goal
-The goal of this project is to provide a Python package in federated learning (FL) that's compatiple with existing machine learning (ML) packages in Python (currently I'm using PyTorch).
+## Goal
+The goal of this project is to develop a general Python package for federated learning (FL) for tabular data that's compatiple with existing machine learning (ML) packages in Python (currently I'm using PyTorch). I also integreted PCA into the regular FL framework as a means of data preprocessing. 
 
-# Use
-## ```Use StartClients.py```
+## Use
 Currently the package is under development and not tested in an actual server environment. However, demonstration of the package in a local environment can be run as follows:
+### Use ```StartClients.py```
 - Download the package
   <br>
 - Install dependencies using requirements.txt file in your environment using
@@ -70,7 +71,7 @@ Currently the package is under development and not tested in an actual server en
        ......
   ```
 
-## Use ```Client.py```
+### Use ```Client.py```
 - Similar to using ```StartClient.py```, ```Client.py``` is dedicated at creating single clients one per process. If you inspect the source code, you'll see StartClients.py is just using a for loop to create clients same way as ```Client.py``` would one by one. This is for the sake of easy testing at my testing stage for all my eight datasets. And in an actual distributed environment, it would only make sense that each client release their job separately using ```Client.py``` over ```StartClients.py```. 
 - After you've downloaded the package and prepared your dataset in the same way above, you can start the Federator using the same command above.
 - Depending on what you input for the ```--n``` parameter, in that many separate terminals, you start clients one at a time using a new terminal using this command: ```python Client.py --h 127.0.0.1 --p 65432 --path path_to_dataset --i client_id```
