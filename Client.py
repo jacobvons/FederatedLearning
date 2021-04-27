@@ -18,11 +18,13 @@ from XCrypt import seg_encrypt, seg_decrypt
 
 class Client:
 
-    def __init__(self, client_id, host, port):
+    def __init__(self, client_id, host, port, path):
         self.client_id = client_id
         self.host = host
         self.port = port
+        self.path = path
         self.fed_pk = None
+        self.dir_name = None
         self.sk = RSA.generate(2048)
         self.pk = self.sk.publickey()
 
@@ -51,32 +53,34 @@ class Client:
                 break
         return data[:-3]
 
-    def work(self, path):
+    def work(self):
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Connection establishment stage (single)
         pk_pem = self.pk.exportKey()
         init_msg = Message(pk_pem, CommStage.CONN_ESTAB)
         self.send(format_msg(dumps(init_msg)))  # init msg 1
         # Receive client_num and explain_ratio
-        self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num = loads(self.recv_large())
+        self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num, self.dir_name = loads(self.recv_large())
         print(self.client_num, "clients in total.")
         print(f"Want to explain {round(self.explain_ratio * 100, 2)}% of data.")
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Find number of pc for this client and report OK to federator
-        data_df = pd.read_csv(path)
+        data_df = pd.read_csv(self.path)
         features = data_df[data_df.columns[:-1]]
         features = preprocessing.normalize(features, axis=0)  # Normalise along instance axis among features
         targets = np.array(data_df[data_df.columns[-1]])
         # Split data
         X_train, X_test, y_train, y_test = train_test_split(features, targets, test_size=0.2)
         # Save training and testing sets respectively
-        if not os.path.exists(f"./client{self.client_id}"):
-            os.mkdir(f"./client{self.client_id}")
-        np.save(f"./client{self.client_id}/X_train.npy", X_train)
-        np.save(f"./client{self.client_id}/X_test.npy", X_test)
-        np.save(f"./client{self.client_id}/y_train.npy", y_train)
-        np.save(f"./client{self.client_id}/y_test.npy", y_test)
+        if not os.path.exists(f"./{self.dir_name}"):
+            os.mkdir(f"./{self.dir_name}")
+        if not os.path.exists(f"./{self.dir_name}/client{self.client_id}"):
+            os.mkdir(f"./{self.dir_name}/client{self.client_id}")
+        np.save(f"./{self.dir_name}/client{self.client_id}/X_train.npy", X_train)
+        np.save(f"./{self.dir_name}/client{self.client_id}/X_test.npy", X_test)
+        np.save(f"./{self.dir_name}/client{self.client_id}/y_train.npy", y_train)
+        np.save(f"./{self.dir_name}/client{self.client_id}/y_test.npy", y_test)
         print("Saved normalised original data.")
         pca = PCA(n_components=5)
         while True:
@@ -128,8 +132,8 @@ class Client:
         avg_pc = avg_pc_msg.message
         reduced_X_train = X_train @ avg_pc.T
         reduced_X_test = X_test @ avg_pc.T
-        np.save(f"./client{self.client_id}/reduced_X_train.npy", reduced_X_train)
-        np.save(f"./client{self.client_id}/reduced_X_test.npy", reduced_X_test)
+        np.save(f"./{self.dir_name}/client{self.client_id}/reduced_X_train.npy", reduced_X_train)
+        np.save(f"./{self.dir_name}/client{self.client_id}/reduced_X_test.npy", reduced_X_test)
         print("Reduced dimensionality of original data")
         reduced_X_train = torch.from_numpy(reduced_X_train)
         reduced_X_test = torch.from_numpy(reduced_X_test)
@@ -137,14 +141,14 @@ class Client:
         y_test = torch.from_numpy(y_test)
         train_dataset = TensorDataset(reduced_X_train, y_train)
         test_dataset = TensorDataset(reduced_X_test, y_test)
-        torch.save(train_dataset, f"./client{self.client_id}/train_dataset.pt")
-        torch.save(test_dataset, f"./client{self.client_id}/test_dataset.pt")
+        torch.save(train_dataset, f"./{self.dir_name}/client{self.client_id}/train_dataset.pt")
+        torch.save(test_dataset, f"./{self.dir_name}/client{self.client_id}/test_dataset.pt")
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Receive initial model stage (single)
         model_msg = self.recv_large()
         model, optimizer, loss_func = loads(model_msg).message
-        torch.save(model, f"./client{self.client_id}/client{self.client_id}_initial_model.pt")
+        torch.save(model, f"./{self.dir_name}/client{self.client_id}/client{self.client_id}_initial_model.pt")
         print("Received model message")
         self.send(b"OK")  # No.6.5
 
@@ -152,11 +156,11 @@ class Client:
         # Reporting stage
         print(f"{self.comm_rounds} communication rounds in total")
         for _ in range(self.comm_rounds):  # Communication rounds
+            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            # Training (Local)
             print(f"Round {self.current_round}")
             model.train()
             loader = DataLoader(train_dataset, shuffle=True, batch_size=10)  # TODO: Pass batch size as parameter
-            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            # Training (Local)
             for n in range(self.epoch_num):  # Training epochs
                 print(f"Epoch {n+1}/{self.epoch_num}")
                 for i, (X, y) in enumerate(loader):  # Mini-batches
@@ -164,7 +168,8 @@ class Client:
                     loss = 0
                     for j in range(len(X)):  # Calculate on a mini-batch
                         prediction = model(reduced_X_train[i])
-                        loss += loss_func(prediction[0], y_train[i])
+                        loss += loss_func(prediction[0], y_train[i], model)
+                        # TODO: adding regularisation term here
                     loss /= len(X)  # Mean loss to do back prop
                     loss.backward()
                     optimizer.step()  # Update grad and bias for each mini-batch
@@ -218,7 +223,7 @@ class Client:
                 with torch.no_grad():
                     layer.weight.data = torch.from_numpy(new_layer_grad)
                     layer.bias.data = torch.from_numpy(new_layer_bias)
-            torch.save(model, f"./client{self.client_id}/client{self.client_id}_model{self.current_round}.pt")
+            torch.save(model, f"./{self.dir_name}/client{self.client_id}/client{self.client_id}_model{self.current_round}.pt")
             print("New model saved.")
             print(f"Round {self.current_round} finished")
             self.current_round += 1
@@ -253,18 +258,13 @@ if __name__ == "__main__":
     parser.add_argument("--i")
     args = parser.parse_args()
 
-    # host = args.h
-    # port = int(args.p)
-    # path = args.path
-    # client_id = args.i
-
-    host = "127.0.0.1"
-    port = 65432
-    path = "../dataset/Ag-quantum.csv"
-    client_id = 2
+    host = args.h
+    port = int(args.p)
+    path = args.path
+    client_id = args.i
 
     torch.set_default_dtype(torch.float64)
 
-    client = Client(client_id, host, port)
+    client = Client(client_id, host, port, path)
     client.connect()
-    client.work(path)
+    client.work()

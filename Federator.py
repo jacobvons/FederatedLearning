@@ -11,11 +11,12 @@ from threading import Thread
 from GeneralFunc import recv_large, format_msg
 from Crypto.PublicKey import RSA
 from XCrypt import seg_decrypt, seg_encrypt
+from Loss import RidgeLoss
 
 
 class Federator:
 
-    def __init__(self, host, port, client_num, comm_rounds, explain_ratio, xcrypt, epoch_num):
+    def __init__(self, host, port, client_num, comm_rounds, explain_ratio, xcrypt, epoch_num, name):
         """
         Initialise a Federator instance
 
@@ -26,10 +27,12 @@ class Federator:
         :param explain_ratio: float between 0 and 1, expected explain ratio for PCA
         :param xcrypt: int 1 or 0, for doing and not doing encryption during communication
         :param epoch_num: int greater or equal to 1, number of epochs for each training round
+        :param name: the name of this Federator, contains information about model, loss function, etc.
         """
         self.host = host
         self.port = port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.name = name
         self.sk = RSA.generate(2048)
         self.pk = self.sk.publickey()
 
@@ -53,6 +56,7 @@ class Federator:
         self.current_round = 1
         self.xcrypt = xcrypt
         self.threads = []
+        self.terminate = False
 
     def reset(self):
         """
@@ -91,7 +95,13 @@ class Federator:
         """
         self.client_pks[sock] = RSA.import_key(message.message)  # init msg 1
         # Send client num and explain ratio
-        sock.send(format_msg(dumps([self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num])))
+        sock.send(
+            format_msg(
+                dumps(
+                    [self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num, self.name]
+                )
+            )
+        )
         sock.recv(2)  # No.1
         print("Waiting to get all clients")
         self.conns.add(sock)
@@ -217,7 +227,9 @@ class Federator:
         # init_model = LinearRegression(len(avg_pc), 1)  # TODO: Test more models
         init_model = MLPRegression(len(avg_pc), 8, 1, 2)
         optimizer = optim.SGD(init_model.parameters(), lr=0.01)  # TODO: Tune hyper-parameters
-        loss_func = nn.MSELoss()
+        # loss_func = nn.MSELoss()
+        loss_func = RidgeLoss()
+        # TODO: adding regularisation term passing here
         print("Average PC Length:", len(avg_pc))
         init_model_msg = format_msg(dumps(Message([init_model, optimizer, loss_func], CommStage.PARAM_DIST)))
         for sock in self.all_sockets:
@@ -282,6 +294,7 @@ class Federator:
             sock.close()
             print(f"Connection to {sock} closed")
         self.reset()
+        self.terminate = True
 
     # Proceeding methods
     def batch_proceed(self):
@@ -346,6 +359,7 @@ if __name__ == "__main__":
     --ratio: explain ratio, must be float, default 0.85
     --x: xcrypt or not, 1 or 0, default 1
     --e: number of epochs for each communication round, default 1 epoch
+    --name: the name of this experiment
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--h")
@@ -355,6 +369,7 @@ if __name__ == "__main__":
     parser.add_argument("--ratio")
     parser.add_argument("--x")
     parser.add_argument("--e")
+    parser.add_argument("--name")
     args = parser.parse_args()
 
     host = args.h
@@ -364,7 +379,8 @@ if __name__ == "__main__":
     explain_ratio = min(1.0, float(args.ratio)) if args.ratio else 0.85
     xcrypt = bool(int(args.x)) if args.x else True
     epoch_num = int(args.e) if args.e else 1
-    fed = Federator(host, port, client_num, training_rounds, explain_ratio, xcrypt, epoch_num)
+    name = args.name  # This can contain information about the models, loss functions, etc.
+    fed = Federator(host, port, client_num, training_rounds, explain_ratio, xcrypt, epoch_num, name)
     torch.set_default_dtype(torch.float64)
 
     while True:
@@ -385,3 +401,7 @@ if __name__ == "__main__":
             thread = Thread(target=fed.batch_proceed)
             thread.start()
             thread.join()  # Do NOT accept new connections until this thread finishes
+
+        if fed.terminate:
+            print(f"Shutting down Federator: {fed.name}")
+            break
