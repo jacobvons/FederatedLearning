@@ -71,7 +71,7 @@ Currently the package is under development and not tested in an actual server en
   ```
 
 ## Use ```Client.py```
-- Similar to using ```StartClient.py```, ```Client.py``` is dedicated at creating single clients one per process. If you inspect the source code, you'll see StartClients.py is just using a for loop to create clients same way as ```Client.py``` would one by one. This is for the sake of easy testing at my testing stage for all my eight datasets. And in an actual distributed environment, it would only make sense that each client release their job separately using ```Client.py``` over ``````StartClients.py```. 
+- Similar to using ```StartClient.py```, ```Client.py``` is dedicated at creating single clients one per process. If you inspect the source code, you'll see StartClients.py is just using a for loop to create clients same way as ```Client.py``` would one by one. This is for the sake of easy testing at my testing stage for all my eight datasets. And in an actual distributed environment, it would only make sense that each client release their job separately using ```Client.py``` over ```StartClients.py```. 
 - After you've downloaded the package and prepared your dataset in the same way above, you can start the Federator using the same command above.
 - Depending on what you input for the ```--n``` parameter, in that many separate terminals, you start clients one at a time using a new terminal using this command: ```python Client.py --h 127.0.0.1 --p 65432 --path path_to_dataset --i client_id```
 - After you've created the expected amount of clients, the process will begin and you should see the same behaviour as before using ```StartClients.py```.
