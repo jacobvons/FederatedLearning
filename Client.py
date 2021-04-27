@@ -168,8 +168,8 @@ class Client:
                     loss = 0
                     for j in range(len(X)):  # Calculate on a mini-batch
                         prediction = model(reduced_X_train[i])
+                        # loss += loss_func(prediction[0], y_train[i])
                         loss += loss_func(prediction[0], y_train[i], model)
-                        # TODO: adding regularisation term here
                     loss /= len(X)  # Mean loss to do back prop
                     loss.backward()
                     optimizer.step()  # Update grad and bias for each mini-batch
