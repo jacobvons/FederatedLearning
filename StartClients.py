@@ -1,13 +1,20 @@
-import os
-import torch
 from threading import Thread
 from Client import *
 
 
 def release_client(client_id, host, port, path):
-    client = Client(client_id, host, port)
+    """
+    Release a Client task to the thread pool
+
+    :param client_id: int, id of a client
+    :param host: str, address of the Federator
+    :param port: int, port of the Federator
+    :param path: str, relative path to the .csv dataset file (NOTE: This is buggy for Windows system currently)
+    :return:
+    """
+    client = Client(client_id, host, port, path)
     client.connect()
-    client.work(path)
+    client.work()
 
 
 if __name__ == "__main__":
