@@ -120,7 +120,6 @@ class Client:
         pc_msg = format_msg(dumps(Message(pcs, CommStage.PC_AGGREGATION)))
         print("Sending encrypted PC")
         self.send(pc_msg)  # init msg 3
-        print("Sent")
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # PC aggregation stage (batch)
@@ -134,7 +133,6 @@ class Client:
         reduced_X_test = X_test @ avg_pc.T
         np.save(f"./{self.dir_name}/client{self.client_id}/reduced_X_train.npy", reduced_X_train)
         np.save(f"./{self.dir_name}/client{self.client_id}/reduced_X_test.npy", reduced_X_test)
-        print("Reduced dimensionality of original data")
         reduced_X_train = torch.from_numpy(reduced_X_train)
         reduced_X_test = torch.from_numpy(reduced_X_test)
         y_train = torch.from_numpy(y_train)
@@ -187,7 +185,6 @@ class Client:
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # Report stage (single)
-            print("Sending updates")
             report_start_msg = Message([len(model_grads), self.current_round], CommStage.REPORT)
             self.send(format_msg(dumps(report_start_msg)))  # init msg 4
             print(f"Sending {len(model_grads)} trainable layers")
@@ -195,13 +192,11 @@ class Client:
                 model_grad = model_grads[i]
                 self.send(format_msg(model_grad))
                 self.recv(2)  # No.7.5
-                print("Sent grad")
 
             for i in range(len(model_biases)):
                 model_bias = model_biases[i]
                 self.send(format_msg(model_bias))
                 self.recv(2)  # No.8.5
-                print("Sent bias")
 
             self.send(b"OK")  # No.8.75
 

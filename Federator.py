@@ -11,7 +11,7 @@ from threading import Thread
 from GeneralFunc import recv_large, format_msg
 from Crypto.PublicKey import RSA
 from XCrypt import seg_decrypt, seg_encrypt
-from Loss import RidgeLoss
+from Loss import RidgeLoss, MSELoss
 
 
 class Federator:
@@ -189,8 +189,6 @@ class Federator:
             sock.send(format_msg(dumps(pk_pem)))
             self.single_proceed(sock)
         print("Sent public key")
-        for t in self.threads:
-            t.join()
         self.state = CommStage.PC_INFO_EXCHANGE
 
     def batch_pc_info_exchange(self):
@@ -204,8 +202,6 @@ class Federator:
         for sock in self.all_sockets:
             sock.send(dumps(max_pc_num))
             self.single_proceed(sock)
-        for t in self.threads:
-            t.join()
         self.state = CommStage.PC_AGGREGATION
 
     def batch_pc_aggregation(self):
@@ -227,16 +223,14 @@ class Federator:
         # init_model = LinearRegression(len(avg_pc), 1)  # TODO: Test more models
         init_model = MLPRegression(len(avg_pc), 8, 1, 2)
         optimizer = optim.SGD(init_model.parameters(), lr=0.01)  # TODO: Tune hyper-parameters
-        # loss_func = nn.MSELoss()
-        loss_func = RidgeLoss()
+        loss_func = MSELoss()
+        # loss_func = RidgeLoss()
         print("Average PC Length:", len(avg_pc))
         init_model_msg = format_msg(dumps(Message([init_model, optimizer, loss_func], CommStage.PARAM_DIST)))
         for sock in self.all_sockets:
             sock.send(init_model_msg)
             sock.recv(2)  # No.6.5
             self.single_proceed(sock)
-        for t in self.threads:
-            t.join()
         self.state = CommStage.REPORT
 
     def batch_report(self):
@@ -277,8 +271,6 @@ class Federator:
 
         for sock in self.all_sockets:
             self.single_proceed(sock)
-        for t in self.threads:
-            t.join()
 
     def batch_end(self):
         """
