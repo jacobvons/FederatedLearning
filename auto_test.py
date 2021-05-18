@@ -1,18 +1,19 @@
 import subprocess
 from threading import Thread
+from ArgReader import *
 
 
 def parse_args(args: dict) -> list:
-    l = []
+    parsed = []
     for k, v in args.items():
-        l.append("--"+k)
-        l.append(str(v))
-    return l
+        parsed.append("--"+str(k))
+        parsed.append(str(v))
+    return parsed
 
 
 def create_fed(args: dict):
-    l = ["python", "Federator.py"] + parse_args(args)
-    subprocess.call(l)
+    cmd = ["python", "Federator.py"] + parse_args(args)
+    subprocess.call(cmd)
 
 
 def start_clients():
@@ -20,12 +21,13 @@ def start_clients():
 
 
 if __name__ == "__main__":
-    fed_args = {"h": "127.0.0.1", "p": 65432, "n": 8, "rounds": 2, "ratio": 0.85, "x": 1, "e": 3, "name": "test"}
-    fed_thread = Thread(target=create_fed, args=(fed_args, ))
-    clients_thread = Thread(target=start_clients)
-
-    fed_thread.start()
-    clients_thread.start()
-
-    fed_thread.join()
-    clients_thread.join()
+    reader = ArgReader("./test_args.csv")
+    reader.parse()
+    fed_args = reader.args
+    for arg_dict in fed_args:
+        fed_thread = Thread(target=create_fed, args=(arg_dict,))
+        clients_thread = Thread(target=start_clients)
+        fed_thread.start()
+        clients_thread.start()
+        fed_thread.join()
+        clients_thread.join()

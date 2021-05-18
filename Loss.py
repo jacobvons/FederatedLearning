@@ -31,7 +31,6 @@ class LassoLoss(nn.Module):
         self.alpha = alpha
 
     def forward(self, pred, ground, model):
-        # cross_entropy = nn.CrossEntropyLoss()
         mse = nn.MSELoss()
         loss = mse(pred, ground)
         for layer in model.layers:

@@ -44,6 +44,12 @@ class Client:
         message = self.sock.recv(size)
         return message
 
+    def send_ok(self):
+        self.send(b"OK")
+
+    def recv_ok(self):
+        self.recv(2)
+
     def recv_large(self):
         data = b""
         while True:
@@ -91,7 +97,7 @@ class Client:
             else:
                 pca = PCA(n_components=pca.n_components + 1)
         print("At least", pc_num, "PCs")
-        self.send(b"OK")  # No.1
+        self.send_ok()  # No.1
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Conn establish (batch)
@@ -124,7 +130,7 @@ class Client:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # PC aggregation stage (batch)
         avg_pc_msg = loads(self.recv_large())
-        self.send(b"OK")  # No.5
+        self.send_ok()  # No.5
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Calculate and save reduced data (Local)
@@ -148,7 +154,7 @@ class Client:
         model, optimizer, loss_func = loads(model_msg).message
         torch.save(model, f"./{self.dir_name}/client{self.client_id}/client{self.client_id}_initial_model.pt")
         print("Received model message")
-        self.send(b"OK")  # No.6.5
+        self.send_ok()  # No.6.5
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Reporting stage
@@ -191,20 +197,20 @@ class Client:
             for i in range(len(model_grads)):
                 model_grad = model_grads[i]
                 self.send(format_msg(model_grad))
-                self.recv(2)  # No.7.5
+                self.recv_ok() # No.7.5
 
             for i in range(len(model_biases)):
                 model_bias = model_biases[i]
                 self.send(format_msg(model_bias))
-                self.recv(2)  # No.8.5
+                self.recv_ok()  # No.8.5
 
-            self.send(b"OK")  # No.8.75
+            self.send_ok()  # No.8.75
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # Report stage (batch)
             # Receive updated model info
             new_grads = loads(self.recv_large()).message
-            self.send(b"OK")  # No.9.5
+            self.send_ok()  # No.9.5
             new_biases = loads(self.recv_large()).message
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -231,7 +237,7 @@ class Client:
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # End stage (batch)
-        self.recv(2)  # No.11
+        self.recv_ok()  # No.11
         self.sock.close()
         print("The end")
 
