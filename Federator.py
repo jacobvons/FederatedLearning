@@ -11,7 +11,7 @@ from threading import Thread
 from GeneralFunc import recv_large, format_msg
 from Crypto.PublicKey import RSA
 from XCrypt import seg_decrypt, seg_encrypt
-from Loss import RidgeLoss, MSELoss
+from Loss import RidgeLoss, MSELoss, LassoLoss
 
 
 class Federator:
@@ -223,8 +223,9 @@ class Federator:
         # init_model = LinearRegression(len(avg_pc), 1)  # TODO: Test more models
         init_model = MLPRegression(len(avg_pc), 8, 1, 2)
         optimizer = optim.SGD(init_model.parameters(), lr=0.01)  # TODO: Tune hyper-parameters
-        loss_func = MSELoss()
+        # loss_func = MSELoss()
         # loss_func = RidgeLoss()
+        loss_func = LassoLoss(0.001)
         print("Average PC Length:", len(avg_pc))
         init_model_msg = format_msg(dumps(Message([init_model, optimizer, loss_func], CommStage.PARAM_DIST)))
         for sock in self.all_sockets:
