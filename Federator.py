@@ -225,7 +225,7 @@ class Federator:
         optimizer = optim.SGD(init_model.parameters(), lr=0.01)  # TODO: Tune hyper-parameters
         # loss_func = MSELoss()
         # loss_func = RidgeLoss()
-        loss_func = LassoLoss(0.001)
+        loss_func = LassoLoss(alpha=0.001)
         print("Average PC Length:", len(avg_pc))
         init_model_msg = format_msg(dumps(Message([init_model, optimizer, loss_func], CommStage.PARAM_DIST)))
         for sock in self.all_sockets:
