@@ -17,6 +17,14 @@ def recv_large(sock):
     return data[:-3]
 
 
+def recv_ok(sock):
+    sock.recv(2)
+
+
+def send_ok(sock):
+    sock.send(b"OK")
+
+
 def format_msg(bytes_msg):
     """
     Formatting a bytes message with a b"end" ending

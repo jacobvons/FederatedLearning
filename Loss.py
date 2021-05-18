@@ -31,8 +31,8 @@ class LassoLoss(nn.Module):
         self.alpha = alpha
 
     def forward(self, pred, ground, model):
-        cross_entropy = nn.CrossEntropyLoss
-        loss = cross_entropy(pred, ground)
+        mse = nn.MSELoss()
+        loss = mse(pred, ground)
         for layer in model.layers:
             params = torch.cat([x.view(-1) for x in layer.parameters()])
             loss += self.alpha * torch.norm(params, 1)  # L1 regularisation term

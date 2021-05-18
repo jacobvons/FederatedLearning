@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 from pickle import dumps, loads
 from threading import Thread
-from GeneralFunc import recv_large, format_msg
+from GeneralFunc import *
 from Crypto.PublicKey import RSA
 from XCrypt import seg_decrypt, seg_encrypt
 from Loss import RidgeLoss, MSELoss, LassoLoss
@@ -102,7 +102,7 @@ class Federator:
                 )
             )
         )
-        sock.recv(2)  # No.1
+        recv_ok(sock)  # No.1
         print("Waiting to get all clients")
         self.conns.add(sock)
         self.all_sockets.append(sock)
@@ -152,14 +152,14 @@ class Federator:
         for i in range(num_layers):
             grad = loads(recv_large(sock))
             self.grads[sock].append(grad)
-            sock.send(b"OK")  # No.7.5
+            send_ok(sock)  # No.7.5
 
         for i in range(num_layers):
             bias = loads(recv_large(sock))
             self.biases[sock].append(bias)
-            sock.send(b"OK")  # No.8.5
+            send_ok(sock)  # No.8.5
 
-        sock.recv(2)  # No.8.75
+        recv_ok(sock)  # No.8.75
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", "\n")
         self.conns.add(sock)
 
@@ -216,21 +216,21 @@ class Federator:
             encrypted_pc = avg_pc
             avg_pc_msg = format_msg(dumps(Message(encrypted_pc, CommStage.PC_AGGREGATION)))
             sock.send(avg_pc_msg)
-            sock.recv(2)  # No.5
+            recv_ok(sock)  # No.5
         print("Sent average PC")
 
         # Model parameter distribution
-        # init_model = LinearRegression(len(avg_pc), 1)  # TODO: Test more models
+        # init_model = LinearRegression(len(avg_pc), 1)
         init_model = MLPRegression(len(avg_pc), 8, 1, 2)
         optimizer = optim.SGD(init_model.parameters(), lr=0.01)  # TODO: Tune hyper-parameters
         # loss_func = MSELoss()
         # loss_func = RidgeLoss()
-        loss_func = LassoLoss(0.001)
+        loss_func = LassoLoss(alpha=0.001)
         print("Average PC Length:", len(avg_pc))
         init_model_msg = format_msg(dumps(Message([init_model, optimizer, loss_func], CommStage.PARAM_DIST)))
         for sock in self.all_sockets:
             sock.send(init_model_msg)
-            sock.recv(2)  # No.6.5
+            recv_ok(sock)  # No.6.5
             self.single_proceed(sock)
         self.state = CommStage.REPORT
 
@@ -265,7 +265,7 @@ class Federator:
             bias_message = dumps(Message(client_bias_sums, CommStage.PARAM_DIST))
 
             sock.send(format_msg(grad_message))
-            sock.recv(2)  # No.9.5
+            recv_ok(sock)  # No.9.5
             sock.send(format_msg(bias_message))
         self.grads = {}
         self.biases = {}
@@ -281,7 +281,7 @@ class Federator:
         """
         self.reset_conns()
         for sock in self.all_sockets:
-            sock.send(b"OK")  # No.11
+            send_ok(sock)  # No.11
             sock.shutdown(2)
             sock.close()
             print(f"Connection to {sock} closed")
