@@ -7,9 +7,13 @@ class ArgReader:
     def parse(self):
         with open(self.path, "r") as f:
             for line in f:
+                if line.startswith("#"):
+                    continue
                 args = {}
                 raw = line.strip().split(",")
                 for arg in raw:
+                    if arg.startswith("#"):
+                        continue
                     name, value = arg.split(":")
                     args[name.strip()] = value.strip()
                 self.args.append(args)
