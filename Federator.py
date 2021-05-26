@@ -35,8 +35,12 @@ class Federator:
         self.name = name
         self.sk = RSA.generate(2048)
         self.pk = self.sk.publickey()
-
-        self.sock.bind((host, port))
+        while True:
+            try:
+                self.sock.bind((host, port))
+                break
+            except:
+                continue
         self.sock.listen()
         print('listening on', (host, port))
         self.sock.setblocking(True)
