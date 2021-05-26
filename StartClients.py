@@ -1,5 +1,6 @@
 from threading import Thread
 from Client import *
+import argparse
 
 
 def release_client(client_id, host, port, path):
@@ -18,7 +19,12 @@ def release_client(client_id, host, port, path):
 
 
 if __name__ == "__main__":
-    host, port = "127.0.0.1", 65432
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--p")
+    args = parser.parse_args()
+
+    host = "127.0.0.1"
+    port = int(args.p)
     torch.set_default_dtype(torch.float64)
     file_dir = "../dataset/"
     files = [f for f in os.listdir(file_dir) if f.endswith(".csv")]
