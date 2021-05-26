@@ -12,6 +12,7 @@ from GeneralFunc import *
 from Crypto.PublicKey import RSA
 from XCrypt import seg_decrypt, seg_encrypt
 from Loss import RidgeLoss, MSELoss, LassoLoss
+import time
 
 
 class Federator:
@@ -40,6 +41,7 @@ class Federator:
                 self.sock.bind((host, port))
                 break
             except:
+                time.sleep(1)
                 continue
         self.sock.listen()
         print('listening on', (host, port))
