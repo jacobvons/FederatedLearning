@@ -118,7 +118,7 @@ class Client:
         # Perform PCA (Local)
         pca = PCA(n_components=final_pc_num)
         pca.fit(X_train)
-        pcs = pca.components_
+        pcs = (pca.components_, sum(pca.explained_variance_ratio_))  # components and explain ratio sum
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # PC aggregation stage (single)

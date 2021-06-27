@@ -17,7 +17,7 @@ import time
 
 class Federator:
 
-    def __init__(self, host, port, client_num, comm_rounds, explain_ratio, xcrypt, epoch_num, name):
+    def __init__(self, host, port, client_num, comm_rounds, explain_ratio, xcrypt, epoch_num, name, pc_agg_method=None):
         """
         Initialise a Federator instance
 
@@ -59,6 +59,8 @@ class Federator:
         self.client_pks = {}
         self.pc_nums = []
         self.pcs = []
+        self.client_ratios = []
+        self.pc_agg_method = pc_agg_method  # Default average, supports by explain ratio, ...
         self.current_round = 1
         self.xcrypt = xcrypt
         self.threads = []
@@ -79,6 +81,7 @@ class Federator:
         self.client_pks = {}
         self.pc_nums = []
         self.pcs = []
+        self.client_ratios = []
         self.current_round = 1
         self.threads = []
 
@@ -133,8 +136,9 @@ class Federator:
         :param message: Message with CommStage PC_AGGREGATION, message body is encrypted PC
         :return:
         """
-        pc = message.message  # init msg 3
+        pc, ratio = message.message  # init msg 3
         self.pcs.append(pc)
+        self.client_ratios.append(ratio)
         self.conns.add(sock)
 
     def single_report(self, sock, message):
@@ -217,7 +221,17 @@ class Federator:
         :return:
         """
         self.reset_conns()
-        avg_pc = sum(self.pcs) / len(self.pcs)  # TODO: Implement weighted pcs
+        # Weighted PC aggregation methods
+        if not self.pc_agg_method or self.pc_agg_method == "avg":
+            print("using avg")
+            avg_pc = sum(self.pcs) / len(self.pcs)  # TODO: Implement weighted pcs
+        elif self.pc_agg_method == "exp_ratio":
+            print("using explain ratio")
+            avg_pc = sum([self.pcs[i] * self.client_ratios[i] for i in range(len(self.pcs))]) / sum(self.client_ratios)
+        else:  # If typo or any other situations, use average
+            print("using default avg due to typo")
+            avg_pc = sum(self.pcs) / len(self.pcs)
+
         for sock in self.all_sockets:
             encrypted_pc = avg_pc
             avg_pc_msg = format_msg(dumps(Message(encrypted_pc, CommStage.PC_AGGREGATION)))
