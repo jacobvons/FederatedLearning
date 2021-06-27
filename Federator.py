@@ -2,7 +2,7 @@ import socket
 import argparse
 from Message import Message
 from CommStage import CommStage
-from Model import LinearRegression, MLPRegression
+from Model import *
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -11,7 +11,7 @@ from threading import Thread
 from GeneralFunc import *
 from Crypto.PublicKey import RSA
 from XCrypt import seg_decrypt, seg_encrypt
-from Loss import RidgeLoss, MSELoss, LassoLoss
+from Loss import *
 import time
 
 
