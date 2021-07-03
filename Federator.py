@@ -276,25 +276,26 @@ class Federator:
         # Aggregation and distribution
         grad_sums = []
         bias_sums = []
+        metric_sum = sum([self.model_agg_metrics[s][self.model_agg_method] for s in self.model_agg_metrics.keys()])
         for sock in self.all_sockets:
             client_grads = [seg_decrypt(g, self.sk, self.xcrypt) for g in self.grads[sock]]
             client_biases = [seg_decrypt(b, self.sk, self.xcrypt, True) for b in self.biases[sock]]
 
-            # TODO: Multiply the metric score here
+            # Getting metric score for aggregation weight
             if self.model_agg_method in self.model_agg_metrics.keys():
                 metric_score = self.model_agg_metrics[sock][self.model_agg_method]
             else:
                 metric_score = self.model_agg_metrics[sock][self.model_agg_method]  # By default use averaging in case of a typo
-            # TODO: Multiply metric score to grad and biases
 
+            # Calculating grad and biases with weights (metric_score/metric_sum)
+            weight = metric_score / metric_sum
             if not len(grad_sums):
-                grad_sums = client_grads
-                bias_sums = client_biases
+                grad_sums = [grad * weight for grad in client_grads]
+                bias_sums = [bias * weight for bias in client_biases]
             else:
-                grad_sums = [grad_sums[i] + client_grads[i] for i in range(0, len(client_grads))]
-                bias_sums = [bias_sums[i] + client_biases[i] for i in range(0, len(bias_sums))]
+                grad_sums = [grad_sums[i] + client_grads[i] * weight for i in range(0, len(client_grads))]
+                bias_sums = [bias_sums[i] + client_biases[i] * weight for i in range(0, len(bias_sums))]
 
-        # TODO: Divide sum of grads and bias by sum of all metric score before sending
         for sock in self.all_sockets:
             client_pk = self.client_pks[sock]
             client_grad_sums = [seg_encrypt(g, client_pk, self.xcrypt) for g in grad_sums]

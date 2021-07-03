@@ -197,7 +197,7 @@ class Client:
             for i in range(len(model_grads)):
                 model_grad = model_grads[i]
                 self.send(format_msg(model_grad))
-                self.recv_ok() # No.7.5
+                self.recv_ok()  # No.7.5
 
             for i in range(len(model_biases)):
                 model_bias = model_biases[i]
@@ -205,7 +205,7 @@ class Client:
                 self.recv_ok()  # No.8
             # TODO: Calculate a range of metric scores to be put in metrics here
             metrics = {"cross_val": 1, "size": 1, "avg": 1}
-            # TODO: Send aggregation metric here (e.g. cross validation score). Need to generate a bunch of scores first
+            # Sending metric scores
             self.send(format_msg(dumps(metrics)))
             self.recv_ok()  # No. 8.25
 
