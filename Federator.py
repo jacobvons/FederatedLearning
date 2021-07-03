@@ -17,7 +17,8 @@ import time
 
 class Federator:
 
-    def __init__(self, host, port, client_num, comm_rounds, explain_ratio, xcrypt, epoch_num, name, pc_agg_method=None):
+    def __init__(self, host, port, client_num, comm_rounds, explain_ratio, xcrypt,
+                 epoch_num, name, pc_agg_method=None, model_agg_method="avg"):
         """
         Initialise a Federator instance
 
@@ -56,6 +57,8 @@ class Federator:
         self.state = CommStage.CONN_ESTAB
         self.grads = {}
         self.biases = {}
+        self.model_agg_metrics = {}
+        self.model_agg_method = model_agg_method  # By default, it's average
         self.client_pks = {}
         self.pc_nums = []
         self.pcs = []
@@ -78,6 +81,8 @@ class Federator:
         self.state = CommStage.CONN_ESTAB
         self.grads = {}
         self.biases = {}
+        self.model_agg_metrics = {}
+        self.pc_agg_method = "avg"
         self.client_pks = {}
         self.pc_nums = []
         self.pcs = []
@@ -167,9 +172,14 @@ class Federator:
         for i in range(num_layers):
             bias = loads(recv_large(sock))
             self.biases[sock].append(bias)
-            send_ok(sock)  # No.8.5
+            send_ok(sock)  # No.8
 
-        recv_ok(sock)  # No.8.75
+        # TODO: Add aggregation metric collection here and save in a dict with sock being key
+        metrics = loads(recv_large(sock))
+        self.model_agg_metrics[sock] = metrics
+        send_ok(sock)  # No.8.25
+
+        recv_ok(sock)  # No.8.5
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", "\n")
         self.conns.add(sock)
 
@@ -224,10 +234,11 @@ class Federator:
         # Weighted PC aggregation methods
         if not self.pc_agg_method or self.pc_agg_method == "avg":
             print("using avg")
-            avg_pc = sum(self.pcs) / len(self.pcs)  # TODO: Implement weighted pcs
+            avg_pc = sum(self.pcs) / len(self.pcs)
         elif self.pc_agg_method == "exp_ratio":
             print("using explain ratio")
             avg_pc = sum([self.pcs[i] * self.client_ratios[i] for i in range(len(self.pcs))]) / sum(self.client_ratios)
+        # TODO: Add more PC aggregation methods here
         else:  # If typo or any other situations, use average
             print("using default avg due to typo")
             avg_pc = sum(self.pcs) / len(self.pcs)
@@ -269,6 +280,13 @@ class Federator:
             client_grads = [seg_decrypt(g, self.sk, self.xcrypt) for g in self.grads[sock]]
             client_biases = [seg_decrypt(b, self.sk, self.xcrypt, True) for b in self.biases[sock]]
 
+            # TODO: Multiply the metric score here
+            if self.model_agg_method in self.model_agg_metrics.keys():
+                metric_score = self.model_agg_metrics[sock][self.model_agg_method]
+            else:
+                metric_score = self.model_agg_metrics[sock][self.model_agg_method]  # By default use averaging in case of a typo
+            # TODO: Multiply metric score to grad and biases
+
             if not len(grad_sums):
                 grad_sums = client_grads
                 bias_sums = client_biases
@@ -276,6 +294,7 @@ class Federator:
                 grad_sums = [grad_sums[i] + client_grads[i] for i in range(0, len(client_grads))]
                 bias_sums = [bias_sums[i] + client_biases[i] for i in range(0, len(bias_sums))]
 
+        # TODO: Divide sum of grads and bias by sum of all metric score before sending
         for sock in self.all_sockets:
             client_pk = self.client_pks[sock]
             client_grad_sums = [seg_encrypt(g, client_pk, self.xcrypt) for g in grad_sums]
