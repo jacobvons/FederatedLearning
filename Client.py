@@ -178,7 +178,6 @@ class Client:
 
                 train_loader = DataLoader(train_dataset, batch_size=10, sampler=train_sampler)
                 val_loader = DataLoader(train_dataset, batch_size=10, sampler=val_sampler)
-                # loader = DataLoader(train_dataset, shuffle=True, batch_size=10)  # TODO: Pass batch size as parameter
                 # Training using training set
                 for n in range(self.epoch_num):  # Training epochs
                     print(f"Epoch {n+1}/{self.epoch_num}")
@@ -194,16 +193,14 @@ class Client:
 
                     # Cross validation using validation set
                     with torch.no_grad():
-                        cv_loss_func = MSELoss()  # Use a separate loss function for cross validation. Higher values mean worse effect
+                        cv_loss_func = MSELoss()  # Use a separate loss function for cross validation
                         cv_loss = 0
                         for j, (features, target) in enumerate(val_loader, 0):
-                            # print(features)
-                            # print(target)
-                            # raise ValueError()
                             prediction = model(features)
                             cv_loss += float(cv_loss_func(prediction[0], target, model))
                     self.metrics["cross_val"] += cv_loss  # Adding cv as an aggregation metric
                 self.metrics["cross_val"] /= self.epoch_num
+                self.metrics["cross_val"] /= 1  # The higher the MSE, the lower the worse
             print("Done training")
 
             model_grads = []
