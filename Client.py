@@ -10,10 +10,12 @@ import torch
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
 from sklearn.decomposition import PCA
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset, SubsetRandomSampler
 from GeneralFunc import format_msg
 from Crypto.PublicKey import RSA
 from XCrypt import seg_encrypt, seg_decrypt
+from sklearn.model_selection import KFold
+from Loss import *
 
 
 class Client:
@@ -27,6 +29,7 @@ class Client:
         self.dir_name = None
         self.sk = RSA.generate(2048)
         self.pk = self.sk.publickey()
+        self.metrics = {"avg": 1}  # Initialising average as an aggregation metric
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.client_num = 0
@@ -76,6 +79,8 @@ class Client:
         features = data_df[data_df.columns[:-1]]
         features = preprocessing.normalize(features, axis=0)  # Normalise along instance axis among features
         targets = np.array(data_df[data_df.columns[-1]])
+        # Adding size as an aggregation metric
+        self.metrics["size"] = targets.shape[0]
         # Split data
         X_train, X_test, y_train, y_test = train_test_split(features, targets, test_size=0.2)
         # Save training and testing sets respectively
@@ -159,24 +164,46 @@ class Client:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Reporting stage
         print(f"{self.comm_rounds} communication rounds in total")
+        kfold = KFold(n_splits=5, shuffle=True)  # TODO: Pass n_splits as a parameter
         for _ in range(self.comm_rounds):  # Communication rounds
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # Training (Local)
             print(f"Round {self.current_round}")
             model.train()
-            loader = DataLoader(train_dataset, shuffle=True, batch_size=10)  # TODO: Pass batch size as parameter
-            for n in range(self.epoch_num):  # Training epochs
-                print(f"Epoch {n+1}/{self.epoch_num}")
-                for i, (X, y) in enumerate(loader):  # Mini-batches
-                    optimizer.zero_grad()
-                    loss = 0
-                    for j in range(len(X)):  # Calculate on a mini-batch
-                        prediction = model(reduced_X_train[i])
-                        # loss += loss_func(prediction[0], y_train[i])
-                        loss += loss_func(prediction[0], y_train[i], model)
-                    loss /= len(X)  # Mean loss to do back prop
-                    loss.backward()
-                    optimizer.step()  # Update grad and bias for each mini-batch
+            # TODO: Implement K-fold cross validation
+            for fold, (train_inds, val_inds) in enumerate(kfold.split(train_dataset)):
+                self.metrics["cross_val"] = 0
+                train_sampler = SubsetRandomSampler(train_inds)
+                val_sampler = SubsetRandomSampler(val_inds)
+
+                train_loader = DataLoader(train_dataset, batch_size=10, sampler=train_sampler)
+                val_loader = DataLoader(train_dataset, batch_size=10, sampler=val_sampler)
+                # loader = DataLoader(train_dataset, shuffle=True, batch_size=10)  # TODO: Pass batch size as parameter
+                # Training using training set
+                for n in range(self.epoch_num):  # Training epochs
+                    print(f"Epoch {n+1}/{self.epoch_num}")
+                    for i, (X, y) in enumerate(train_loader, 0):  # Mini-batches
+                        optimizer.zero_grad()
+                        loss = 0
+                        for j in range(len(X)):  # Calculate on a mini-batch
+                            prediction = model(reduced_X_train[i])
+                            loss += loss_func(prediction[0], y_train[i], model)
+                        loss /= len(X)  # Mean loss to do back prop
+                        loss.backward()
+                        optimizer.step()  # Update grad and bias for each mini-batch
+
+                    # Cross validation using validation set
+                    with torch.no_grad():
+                        cv_loss_func = MSELoss()  # Use a separate loss function for cross validation. Higher values mean worse effect
+                        cv_loss = 0
+                        for j, (features, target) in enumerate(val_loader, 0):
+                            # print(features)
+                            # print(target)
+                            # raise ValueError()
+                            prediction = model(features)
+                            cv_loss += float(cv_loss_func(prediction[0], target, model))
+                    self.metrics["cross_val"] += cv_loss  # Adding cv as an aggregation metric
+                self.metrics["cross_val"] /= self.epoch_num
             print("Done training")
 
             model_grads = []
@@ -203,10 +230,9 @@ class Client:
                 model_bias = model_biases[i]
                 self.send(format_msg(model_bias))
                 self.recv_ok()  # No.8
-            # TODO: Calculate a range of metric scores to be put in metrics here
-            metrics = {"cross_val": 1, "size": 1, "avg": 1}
+
             # Sending metric scores
-            self.send(format_msg(dumps(metrics)))
+            self.send(format_msg(dumps(self.metrics)))
             self.recv_ok()  # No. 8.25
 
             self.send_ok()  # No. 8.5

@@ -174,7 +174,6 @@ class Federator:
             self.biases[sock].append(bias)
             send_ok(sock)  # No.8
 
-        # TODO: Add aggregation metric collection here and save in a dict with sock being key
         metrics = loads(recv_large(sock))
         self.model_agg_metrics[sock] = metrics
         send_ok(sock)  # No.8.25
@@ -267,7 +266,7 @@ class Federator:
 
     def batch_report(self):
         """
-        Calculates "averaged" model information and send the outcome to clients
+        Calculates weighted averated model information and send the outcome to clients
 
         :return:
         """
