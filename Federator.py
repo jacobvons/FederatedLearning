@@ -401,6 +401,8 @@ if __name__ == "__main__":
     parser.add_argument("--x")
     parser.add_argument("--e")
     parser.add_argument("--name")
+    parser.add_argument("--pc_agg")
+    parser.add_argument("--mod_agg")
     args = parser.parse_args()
 
     host = args.h

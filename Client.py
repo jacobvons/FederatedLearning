@@ -170,7 +170,7 @@ class Client:
             # Training (Local)
             print(f"Round {self.current_round}")
             model.train()
-            # TODO: Implement K-fold cross validation
+            # K-fold cross validation
             for fold, (train_inds, val_inds) in enumerate(kfold.split(train_dataset)):
                 self.metrics["cross_val"] = 0
                 train_sampler = SubsetRandomSampler(train_inds)
@@ -178,12 +178,14 @@ class Client:
 
                 train_loader = DataLoader(train_dataset, batch_size=10, sampler=train_sampler)
                 val_loader = DataLoader(train_dataset, batch_size=10, sampler=val_sampler)
-                # Training using training set
+                # Training epochs
                 for n in range(self.epoch_num):  # Training epochs
                     print(f"Epoch {n+1}/{self.epoch_num}")
+                    # Mini batches
                     for i, (X, y) in enumerate(train_loader, 0):  # Mini-batches
                         optimizer.zero_grad()
                         loss = 0
+                        # A mini batch
                         for j in range(len(X)):  # Calculate on a mini-batch
                             prediction = model(reduced_X_train[i])
                             loss += loss_func(prediction[0], y_train[i], model)
@@ -199,8 +201,7 @@ class Client:
                             prediction = model(features)
                             cv_loss += float(cv_loss_func(prediction[0], target, model))
                     self.metrics["cross_val"] += cv_loss  # Adding cv as an aggregation metric
-                self.metrics["cross_val"] /= self.epoch_num
-                self.metrics["cross_val"] /= 1  # The higher the MSE, the lower the worse
+                self.metrics["cross_val"] = self.epoch_num / self.metrics["cross_val"]  # cv_score = 1 / (mse / epoch)
             print("Done training")
 
             model_grads = []
