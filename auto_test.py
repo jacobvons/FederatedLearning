@@ -21,7 +21,8 @@ def create_fed(args: dict):
                     client_num=int(args["n"]),
                     comm_rounds=int(args["rounds"]),
                     explain_ratio=float(args["ratio"]),
-                    pc_agg_method=args["pc_agg"] if args["pc_agg"] else None,
+                    pc_agg_method=args["pc_agg"],
+                    model_agg_method=args["mod_agg"],
                     xcrypt=bool(args["x"]),
                     epoch_num=int(args["e"]),
                     name=args["name"])

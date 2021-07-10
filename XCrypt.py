@@ -6,7 +6,7 @@ import math
 
 def seg_encrypt(arr, pk, real_encrypt):
     """
-    Segment encrypt a piece of data
+    Encrypt a piece of data in small segments
 
     :param arr: some numpy array
     :param pk: public key used for encryption
@@ -22,7 +22,6 @@ def seg_encrypt(arr, pk, real_encrypt):
 
         for i in range(0, len(padded_msg), block_size):
             sub_msg = padded_msg[i: i + block_size]
-            # sub = pk.encrypt(sub_msg, b"")
             sub = cipher.encrypt(sub_msg)
             encrypt_list.append(sub)
         text = b"".join(encrypt_list)
