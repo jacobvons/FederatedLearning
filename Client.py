@@ -84,14 +84,16 @@ class Client:
         # Split data
         X_train, X_test, y_train, y_test = train_test_split(features, targets, test_size=0.2)
         # Save training and testing sets respectively
-        if not os.path.exists(f"./{self.dir_name}"):
-            os.mkdir(f"./{self.dir_name}")
-        if not os.path.exists(f"./{self.dir_name}/client{self.client_id}"):
-            os.mkdir(f"./{self.dir_name}/client{self.client_id}")
-        np.save(f"./{self.dir_name}/client{self.client_id}/X_train.npy", X_train)
-        np.save(f"./{self.dir_name}/client{self.client_id}/X_test.npy", X_test)
-        np.save(f"./{self.dir_name}/client{self.client_id}/y_train.npy", y_train)
-        np.save(f"./{self.dir_name}/client{self.client_id}/y_test.npy", y_test)
+        if not os.path.exists("./tests"):
+            os.mkdir("./tests")
+        if not os.path.exists(f"./tests/{self.dir_name}"):
+            os.mkdir(f"./tests/{self.dir_name}")
+        if not os.path.exists(f"./tests/{self.dir_name}/client{self.client_id}"):
+            os.mkdir(f"./tests/{self.dir_name}/client{self.client_id}")
+        np.save(f"./tests/{self.dir_name}/client{self.client_id}/X_train.npy", X_train)
+        np.save(f"./tests/{self.dir_name}/client{self.client_id}/X_test.npy", X_test)
+        np.save(f"./tests/{self.dir_name}/client{self.client_id}/y_train.npy", y_train)
+        np.save(f"./tests/{self.dir_name}/client{self.client_id}/y_test.npy", y_test)
         print("Saved normalised original data.")
         pca = PCA(n_components=5)
         while True:
@@ -142,22 +144,22 @@ class Client:
         avg_pc = avg_pc_msg.message
         reduced_X_train = X_train @ avg_pc.T
         reduced_X_test = X_test @ avg_pc.T
-        np.save(f"./{self.dir_name}/client{self.client_id}/reduced_X_train.npy", reduced_X_train)
-        np.save(f"./{self.dir_name}/client{self.client_id}/reduced_X_test.npy", reduced_X_test)
+        np.save(f"./tests/{self.dir_name}/client{self.client_id}/reduced_X_train.npy", reduced_X_train)
+        np.save(f"./tests/{self.dir_name}/client{self.client_id}/reduced_X_test.npy", reduced_X_test)
         reduced_X_train = torch.from_numpy(reduced_X_train)
         reduced_X_test = torch.from_numpy(reduced_X_test)
         y_train = torch.from_numpy(y_train)
         y_test = torch.from_numpy(y_test)
         train_dataset = TensorDataset(reduced_X_train, y_train)
         test_dataset = TensorDataset(reduced_X_test, y_test)
-        torch.save(train_dataset, f"./{self.dir_name}/client{self.client_id}/train_dataset.pt")
-        torch.save(test_dataset, f"./{self.dir_name}/client{self.client_id}/test_dataset.pt")
+        torch.save(train_dataset, f"./tests/{self.dir_name}/client{self.client_id}/train_dataset.pt")
+        torch.save(test_dataset, f"./tests/{self.dir_name}/client{self.client_id}/test_dataset.pt")
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Receive initial model stage (single)
         model_msg = self.recv_large()
         model, optimizer, loss_func = loads(model_msg).message
-        torch.save(model, f"./{self.dir_name}/client{self.client_id}/client{self.client_id}_initial_model.pt")
+        torch.save(model, f"./tests/{self.dir_name}/client{self.client_id}/client{self.client_id}_initial_model.pt")
         print("Received model message")
         self.send_ok()  # No.6.5
 
@@ -253,7 +255,7 @@ class Client:
                 with torch.no_grad():
                     layer.weight.data = torch.from_numpy(new_layer_grad)
                     layer.bias.data = torch.from_numpy(new_layer_bias)
-            torch.save(model, f"./{self.dir_name}/client{self.client_id}/client{self.client_id}_model{self.current_round}.pt")
+            torch.save(model, f"./tests/{self.dir_name}/client{self.client_id}/client{self.client_id}_model{self.current_round}.pt")
             print("New model saved.")
             print(f"Round {self.current_round} finished")
             self.current_round += 1
