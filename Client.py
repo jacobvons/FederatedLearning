@@ -7,14 +7,13 @@ import pandas as pd
 from Message import Message
 from CommStage import CommStage
 import torch
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, KFold
 from sklearn import preprocessing
 from sklearn.decomposition import PCA
 from torch.utils.data import DataLoader, TensorDataset, SubsetRandomSampler
 from GeneralFunc import format_msg
 from Crypto.PublicKey import RSA
 from XCrypt import seg_encrypt, seg_decrypt
-from sklearn.model_selection import KFold
 from Loss import *
 
 
@@ -167,11 +166,11 @@ class Client:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Reporting stage
         print(f"{self.comm_rounds} communication rounds in total")
-        kfold = KFold(n_splits=5, shuffle=True)  # TODO: Pass n_splits as a parameter
         for _ in range(self.comm_rounds):  # Communication rounds
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # Training (Local)
             print(f"Round {self.current_round}")
+            kfold = KFold(n_splits=5, shuffle=True)  # TODO: Pass n_splits as a parameter
             model.train()
             # K-fold cross validation
             for fold, (train_inds, val_inds) in enumerate(kfold.split(train_dataset)):
@@ -196,15 +195,15 @@ class Client:
                         loss.backward()
                         optimizer.step()  # Update grad and bias for each mini-batch
 
-                    # Cross validation using validation set
-                    with torch.no_grad():
-                        cv_loss_func = MSELoss()  # Use a separate loss function for cross validation
-                        cv_loss = 0
-                        for j, (features, target) in enumerate(val_loader, 0):
-                            prediction = model(features)
-                            cv_loss += float(cv_loss_func(prediction[0], target, model))
-                    self.metrics["cross_val"] += cv_loss  # Adding cv as an aggregation metric
-                self.metrics["cross_val"] = self.epoch_num / self.metrics["cross_val"]  # cv_score = 1 / (mse / epoch)
+                # Cross validation using validation set
+                with torch.no_grad():
+                    cv_loss_func = MSELoss()  # Use a separate loss function for cross validation
+                    cv_loss = 0
+                    for j, (features, target) in enumerate(val_loader, 0):
+                        prediction = model(features)
+                        cv_loss += float(cv_loss_func(prediction[0], target, model))
+                self.metrics["cross_val"] += cv_loss  # Adding cv as an aggregation metric
+            self.metrics["cross_val"] = self.epoch_num / self.metrics["cross_val"]  # cv_score = 1 / (mse / epoch)
             print("Done training")
 
             model_grads = []
