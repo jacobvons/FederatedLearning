@@ -119,7 +119,7 @@ class Client:
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # PC info exchange stage (batch)
-        final_pc_num = loads(self.recv(10))  # Fed: sock.send(dumps(max_pc_num))
+        final_pc_num = loads(self.recv(10))
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Perform PCA (Local)
