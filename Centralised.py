@@ -25,6 +25,7 @@ if __name__ == "__main__":
         comm_rounds = int(args["rounds"])
         name = args["name"]
         explain_ratio = float(args["ratio"])
+        lr = float(args["lr"])
 
         # Data Split
         data_df = pd.read_csv(data_path)
@@ -67,6 +68,8 @@ if __name__ == "__main__":
         # loss_func = LassoLoss(alpha=0.001)
 
         for r in range(comm_rounds):
+            for g in optimizer.param_groups:
+                g["lr"] = g["lr"] * lr
             model.train()
             kfold = KFold(n_splits=5, shuffle=True)
             # K-fold cross validation

@@ -25,6 +25,7 @@ def create_fed(args: dict):
                     model_agg_method=args["mod_agg"],
                     xcrypt=bool(args["x"]),
                     epoch_num=int(args["e"]),
+                    lr=float(args["lr"]),
                     name=args["name"])
     return fed
 

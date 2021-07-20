@@ -34,6 +34,7 @@ class Client:
         self.client_num = 0
         self.current_round = 1
         self.xcrypt = True
+        self.lr = 1
 
     def connect(self):
         self.sock.connect((self.host, self.port))
@@ -68,7 +69,7 @@ class Client:
         init_msg = Message(pk_pem, CommStage.CONN_ESTAB)
         self.send(format_msg(dumps(init_msg)))  # init msg 1
         # Receive client_num and explain_ratio
-        self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num, self.dir_name = loads(self.recv_large())
+        self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num, self.dir_name, self.lr = loads(self.recv_large())
         print(self.client_num, "clients in total.")
         print(f"Want to explain {round(self.explain_ratio * 100, 2)}% of data.")
 
@@ -114,7 +115,7 @@ class Client:
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # PC info exchange stage (single)
-        preprocess_init_msg = Message(pc_num, CommStage.PC_INFO_EXCHANGE)
+        preprocess_init_msg = Message([pc_num, X_train.shape[0]], CommStage.PC_INFO_EXCHANGE)
         self.send(format_msg(dumps(preprocess_init_msg)))  # init msg 2
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -167,6 +168,9 @@ class Client:
         # Reporting stage
         print(f"{self.comm_rounds} communication rounds in total")
         for _ in range(self.comm_rounds):  # Communication rounds
+            # Update learning rate (constant, increasing or descending)
+            for g in optimizer.param_groups:
+                g["lr"] = g["lr"] * self.lr
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # Training (Local)
             print(f"Round {self.current_round}")

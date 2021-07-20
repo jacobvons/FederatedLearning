@@ -18,7 +18,7 @@ import time
 class Federator:
 
     def __init__(self, host, port, client_num, comm_rounds, explain_ratio, xcrypt,
-                 epoch_num, name, pc_agg_method=None, model_agg_method="avg"):
+                 epoch_num, name, pc_agg_method=None, model_agg_method="avg", lr=1):
         """
         Initialise a Federator instance
 
@@ -61,13 +61,15 @@ class Federator:
         self.model_agg_method = model_agg_method  # By default, it's average
         self.client_pks = {}
         self.pc_nums = []
-        self.pcs = []
-        self.client_ratios = []
+        self.pcs = {}
+        self.client_ratios = {}
+        self.sizes = {}
         self.pc_agg_method = pc_agg_method  # Default average, supports by explain ratio, ...
         self.current_round = 1
         self.xcrypt = xcrypt
         self.threads = []
         self.terminate = False
+        self.lr = lr
 
     def reset(self):
         """
@@ -86,7 +88,9 @@ class Federator:
         self.client_pks = {}
         self.pc_nums = []
         self.pcs = []
-        self.client_ratios = []
+        self.pcs = {}
+        self.client_ratios = {}
+        self.sizes = {}
         self.current_round = 1
         self.threads = []
 
@@ -112,7 +116,7 @@ class Federator:
         sock.send(
             format_msg(
                 dumps(
-                    [self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num, self.name]
+                    [self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num, self.name, self.lr]
                 )
             )
         )
@@ -130,7 +134,9 @@ class Federator:
         :param message: Message with CommState PC_INFO_EXCHANGE, message body is PC number of the client
         :return:
         """
-        self.pc_nums.append(message.message)  # init msg 2
+        pc_num, data_size = message.message
+        self.pc_nums.append(pc_num)  # init msg 2
+        self.sizes[sock] = data_size
         self.conns.add(sock)
 
     def single_pc_aggregation(self, sock, message):
@@ -142,8 +148,8 @@ class Federator:
         :return:
         """
         pc, ratio = message.message  # init msg 3
-        self.pcs.append(pc)
-        self.client_ratios.append(ratio)
+        self.pcs[sock] = pc
+        self.client_ratios[sock] = ratio
         self.conns.add(sock)
 
     def single_report(self, sock, message):
@@ -233,14 +239,18 @@ class Federator:
         # Weighted PC aggregation methods
         if not self.pc_agg_method or self.pc_agg_method == "avg":
             print("using avg")
-            avg_pc = sum(self.pcs) / len(self.pcs)
+            # avg_pc = sum(self.pcs) / len(self.pcs)
+            avg_pc = sum(self.pcs.values()) / len(self.pcs)
         elif self.pc_agg_method == "exp_ratio":
             print("using explain ratio")
-            avg_pc = sum([self.pcs[i] * self.client_ratios[i] for i in range(len(self.pcs))]) / sum(self.client_ratios)
+            avg_pc = sum([self.pcs[s] * self.client_ratios[s] for s in self.pcs.keys()]) / sum(self.client_ratios.values())
+        elif self.pc_agg_method == "size":
+            print("using dataset size")
+            avg_pc = sum([self.pcs[s] * self.sizes[s] for s in self.pcs.keys()]) / sum(self.sizes.values())
         # TODO: Add more PC aggregation methods here
-        else:  # If typo or any other situations, use average
+        else:  # If typo or any other situations, use average by default
             print("using default avg due to typo")
-            avg_pc = sum(self.pcs) / len(self.pcs)
+            avg_pc = sum(self.pcs.values()) / len(self.pcs)
 
         for sock in self.all_sockets:
             encrypted_pc = avg_pc
@@ -403,6 +413,7 @@ if __name__ == "__main__":
     parser.add_argument("--name")
     parser.add_argument("--pc_agg")
     parser.add_argument("--mod_agg")
+    parser.add_argument("--lr")
     args = parser.parse_args()
 
     host = args.h
