@@ -99,6 +99,7 @@ class Client:
                         # A mini batch
                         for j in range(len(X)):  # Calculate on a mini-batch
                             prediction = model(reduced_X_train[i])
+
                             loss += loss_func(prediction[0], y_train[i], model)
                         loss /= len(X)  # Mean loss to do back prop
                         loss.backward()
@@ -168,6 +169,68 @@ class Client:
             print(f"Round {self.current_round} finished")
             self.current_round += 1
 
+    def find_pc_num(self, X_train):
+        pca = PCA(n_components=5)
+        while True:
+            pca.fit(X_train)
+            if sum(pca.explained_variance_ratio_) >= self.explain_ratio:
+                pc_num = len(pca.components_)
+                break
+            else:
+                pca = PCA(n_components=pca.n_components + 1)
+        print("At least", pc_num, "PCs")
+        return pc_num
+
+    def save_original_data(self, X_train, X_test, y_train, y_test):
+        # Save training and testing sets respectively
+        np.save(os.path.join(self.client_dir, "X_train.npy"), X_train)
+        np.save(os.path.join(self.client_dir, "X_test.npy"), X_test)
+        np.save(os.path.join(self.client_dir, "y_train.npy"), y_train)
+        np.save(os.path.join(self.client_dir, "y_test.npy"), y_test)
+        print("Saved normalised original data.")
+
+    def save_reduced_data(self, avg_pc, X_train, X_test, y_train, y_test):
+        reduced_X_train = X_train @ avg_pc.T
+        reduced_X_test = X_test @ avg_pc.T
+        np.save(os.path.join(self.client_dir, "reduced_X_train.npy"), reduced_X_train)
+        np.save(os.path.join(self.client_dir, "reduced_X_test.npy"), reduced_X_test)
+
+        reduced_X_train = torch.from_numpy(reduced_X_train)
+        reduced_X_test = torch.from_numpy(reduced_X_test)
+        y_train = torch.from_numpy(y_train)
+        y_test = torch.from_numpy(y_test)
+        train_dataset = TensorDataset(reduced_X_train, y_train)
+        test_dataset = TensorDataset(reduced_X_test, y_test)
+
+        torch.save(train_dataset, os.path.join(self.client_dir, "train_dataset.pt"))
+        torch.save(test_dataset, os.path.join(self.client_dir, "test_dataset.pt"))
+        return reduced_X_train, reduced_X_test, y_train, y_test, train_dataset, test_dataset
+
+    def dim_reduction(self, X_train):
+        pc_num = self.find_pc_num(X_train)
+        self.send_ok()  # No.1
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # Conn establish (batch)
+        # Receive Federator public key
+        self.fed_pk = RSA.import_key(loads(self.recv_large()))
+        print("Received Federator public key")
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # PC info exchange stage (single)
+        preprocess_init_msg = Message([pc_num, X_train.shape[0]], CommStage.PC_INFO_EXCHANGE)
+        self.send(format_msg(dumps(preprocess_init_msg)))  # init msg 2
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # PC info exchange stage (batch)
+        final_pc_num = loads(self.recv(10))
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # Perform PCA (Local)
+        pca = PCA(n_components=final_pc_num)
+        pca.fit(X_train)
+        pcs = (pca.components_, sum(pca.explained_variance_ratio_))  # components and explain ratio sum
+        return pcs
+
     def work(self):
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Connection establishment stage (single)
@@ -189,43 +252,8 @@ class Client:
         self.metrics["size"] = targets.shape[0]
         # Split data
         X_train, X_test, y_train, y_test = train_test_split(features, targets, test_size=0.2)
-        # Save training and testing sets respectively
-        np.save(os.path.join(self.client_dir, "X_train.npy"), X_train)
-        np.save(os.path.join(self.client_dir, "X_test.npy"), X_test)
-        np.save(os.path.join(self.client_dir, "y_train.npy"), y_train)
-        np.save(os.path.join(self.client_dir, "y_test.npy"), y_test)
-        print("Saved normalised original data.")
-        pca = PCA(n_components=5)
-        while True:
-            pca.fit(X_train)
-            if sum(pca.explained_variance_ratio_) >= self.explain_ratio:
-                pc_num = len(pca.components_)
-                break
-            else:
-                pca = PCA(n_components=pca.n_components + 1)
-        print("At least", pc_num, "PCs")
-        self.send_ok()  # No.1
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # Conn establish (batch)
-        # Receive Federator public key
-        self.fed_pk = RSA.import_key(loads(self.recv_large()))
-        print("Received Federator public key")
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # PC info exchange stage (single)
-        preprocess_init_msg = Message([pc_num, X_train.shape[0]], CommStage.PC_INFO_EXCHANGE)
-        self.send(format_msg(dumps(preprocess_init_msg)))  # init msg 2
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # PC info exchange stage (batch)
-        final_pc_num = loads(self.recv(10))
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # Perform PCA (Local)
-        pca = PCA(n_components=final_pc_num)
-        pca.fit(X_train)
-        pcs = (pca.components_, sum(pca.explained_variance_ratio_))  # components and explain ratio sum
+        self.save_original_data(X_train, X_test, y_train, y_test)
+        pcs = self.dim_reduction(X_train)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # PC aggregation stage (single)
@@ -242,18 +270,7 @@ class Client:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Calculate and save reduced data (Local)
         avg_pc = avg_pc_msg.message
-        reduced_X_train = X_train @ avg_pc.T
-        reduced_X_test = X_test @ avg_pc.T
-        np.save(os.path.join(self.client_dir, "reduced_X_train.npy"), reduced_X_train)
-        np.save(os.path.join(self.client_dir, "reduced_X_test.npy"), reduced_X_test)
-        reduced_X_train = torch.from_numpy(reduced_X_train)
-        reduced_X_test = torch.from_numpy(reduced_X_test)
-        y_train = torch.from_numpy(y_train)
-        y_test = torch.from_numpy(y_test)
-        train_dataset = TensorDataset(reduced_X_train, y_train)
-        test_dataset = TensorDataset(reduced_X_test, y_test)
-        torch.save(train_dataset, os.path.join(self.client_dir, "train_dataset.pt"))
-        torch.save(test_dataset, os.path.join(self.client_dir, "test_dataset.pt"))
+        reduced_X_train, reduced_X_test, y_train, y_test, train_dataset, test_dataset = self.save_reduced_data(avg_pc, X_train, X_test, y_train, y_test)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Receive initial model stage (single)
