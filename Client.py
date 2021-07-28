@@ -71,7 +71,16 @@ class Client:
         return data[:-3]
 
     def local_train(self, model, optimizer, loss_func, train_dataset, reduced_X_train, y_train):
+        """
 
+        :param model: model used for training
+        :param optimizer: optimizer
+        :param loss_func: loss function
+        :param train_dataset: PyTorch Dataset instance, used for training, containing the validation data
+        :param reduced_X_train: Reduced
+        :param y_train:
+        :return:
+        """
         for _ in range(self.comm_rounds):  # Communication rounds
             # Update learning rate (constant, increasing or descending)
             for g in optimizer.param_groups:
@@ -98,9 +107,8 @@ class Client:
                         loss = 0
                         # A mini batch
                         for j in range(len(X)):  # Calculate on a mini-batch
-                            prediction = model(reduced_X_train[i])
-
-                            loss += loss_func(prediction[0], y_train[i], model)
+                            prediction = model(X[j])
+                            loss += loss_func(prediction[0], y[j], model)
                         loss /= len(X)  # Mean loss to do back prop
                         loss.backward()
                         optimizer.step()  # Update grad and bias for each mini-batch
@@ -228,7 +236,7 @@ class Client:
         # Perform PCA (Local)
         pca = PCA(n_components=final_pc_num)
         pca.fit(X_train)
-        pcs = (pca.components_, sum(pca.explained_variance_ratio_))  # components and explain ratio sum
+        pcs = (pca.components_, sum(pca.explained_variance_ratio_))  # principle components and explain ratio sum
         return pcs
 
     def work(self):
