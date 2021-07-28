@@ -45,23 +45,49 @@ class Client:
         self.client_dir = f"./tests/{self.dir_name}/client{self.client_id}"
 
     def connect(self):
+        """
+        Establishes connection to the host
+        :return:
+        """
         self.sock.connect((self.host, self.port))
         self.sock.setblocking(True)
 
     def send(self, message):
+        """
+        Send a message through client socket
+        :param message: Message got sent
+        :return:
+        """
         self.sock.send(message)
 
     def recv(self, size):
+        """
+        Receives a bytes from host
+        :param size: Expected byte size
+        :return: bytes of size "size"
+        """
         message = self.sock.recv(size)
         return message
 
     def send_ok(self):
+        """
+        Sends OK for confirmation
+        :return:
+        """
         self.send(b"OK")
 
     def recv_ok(self):
+        """
+        Receives OK from host for confirmation
+        :return:
+        """
         self.recv(2)
 
     def recv_large(self):
+        """
+        Receive a "large" piece of Message iteratively until it finishes
+        :return: the ACTUAL message without b'end'
+        """
         data = b""
         while True:
             pack = self.recv(10)
@@ -70,15 +96,13 @@ class Client:
                 break
         return data[:-3]
 
-    def local_train(self, model, optimizer, loss_func, train_dataset, reduced_X_train, y_train):
+    def local_train(self, model, optimizer, loss_func, train_dataset):
         """
-
+        Performs local training with given model and some compulsory communication with host
         :param model: model used for training
         :param optimizer: optimizer
         :param loss_func: loss function
         :param train_dataset: PyTorch Dataset instance, used for training, containing the validation data
-        :param reduced_X_train: Reduced
-        :param y_train:
         :return:
         """
         for _ in range(self.comm_rounds):  # Communication rounds
@@ -178,6 +202,11 @@ class Client:
             self.current_round += 1
 
     def find_pc_num(self, X_train):
+        """
+        Find number of principle components of a given trainig set
+        :param X_train: training data to be reduced
+        :return: number of principle components expected
+        """
         pca = PCA(n_components=5)
         while True:
             pca.fit(X_train)
@@ -190,6 +219,14 @@ class Client:
         return pc_num
 
     def save_original_data(self, X_train, X_test, y_train, y_test):
+        """
+        Saves the given data to numpy files
+        :param X_train: training feature data
+        :param X_test: testing feature data
+        :param y_train: training target data
+        :param y_test: testing target data
+        :return:
+        """
         # Save training and testing sets respectively
         np.save(os.path.join(self.client_dir, "X_train.npy"), X_train)
         np.save(os.path.join(self.client_dir, "X_test.npy"), X_test)
@@ -197,14 +234,18 @@ class Client:
         np.save(os.path.join(self.client_dir, "y_test.npy"), y_test)
         print("Saved normalised original data.")
 
-    def save_reduced_data(self, avg_pc, X_train, X_test, y_train, y_test):
-        reduced_X_train = X_train @ avg_pc.T
-        reduced_X_test = X_test @ avg_pc.T
-        np.save(os.path.join(self.client_dir, "reduced_X_train.npy"), reduced_X_train)
-        np.save(os.path.join(self.client_dir, "reduced_X_test.npy"), reduced_X_test)
-
-        reduced_X_train = torch.from_numpy(reduced_X_train)
-        reduced_X_test = torch.from_numpy(reduced_X_test)
+    def save_reduced_dataset(self, avg_pc, X_train, X_test, y_train, y_test):
+        """
+        Reduce training data, generate TensorDataset and save them
+        :param avg_pc: "averaged" principle components used for dimension reduction
+        :param X_train: training feature data
+        :param X_test: testing feature data
+        :param y_train: training target data
+        :param y_test: testing target data
+        :return: training dataset and testing dataset
+        """
+        reduced_X_train = torch.from_numpy(X_train @ avg_pc.T)
+        reduced_X_test = torch.from_numpy(X_test @ avg_pc.T)
         y_train = torch.from_numpy(y_train)
         y_test = torch.from_numpy(y_test)
         train_dataset = TensorDataset(reduced_X_train, y_train)
@@ -212,9 +253,14 @@ class Client:
 
         torch.save(train_dataset, os.path.join(self.client_dir, "train_dataset.pt"))
         torch.save(test_dataset, os.path.join(self.client_dir, "test_dataset.pt"))
-        return reduced_X_train, reduced_X_test, y_train, y_test, train_dataset, test_dataset
+        return train_dataset, test_dataset
 
     def dim_reduction(self, X_train):
+        """
+        Perform dimension reduction and do some compulsory communication with host
+        :param X_train: training feature data
+        :return: pcs: principle components and the final explain ratio
+        """
         pc_num = self.find_pc_num(X_train)
         self.send_ok()  # No.1
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -240,6 +286,10 @@ class Client:
         return pcs
 
     def work(self):
+        """
+        Client working pipeline
+        :return:
+        """
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Connection establishment stage (single)
         pk_pem = self.pk.exportKey()
@@ -278,7 +328,7 @@ class Client:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Calculate and save reduced data (Local)
         avg_pc = avg_pc_msg.message
-        reduced_X_train, reduced_X_test, y_train, y_test, train_dataset, test_dataset = self.save_reduced_data(avg_pc, X_train, X_test, y_train, y_test)
+        train_dataset, test_dataset = self.save_reduced_dataset(avg_pc, X_train, X_test, y_train, y_test)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Receive initial model stage (single)
@@ -292,7 +342,7 @@ class Client:
         # Reporting stage
         print(f"{self.comm_rounds} communication rounds in total")
         # Local Training
-        self.local_train(model, optimizer, loss_func, train_dataset, reduced_X_train, y_train)
+        self.local_train(model, optimizer, loss_func, train_dataset)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # End stage (single)
