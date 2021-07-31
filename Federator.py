@@ -333,7 +333,7 @@ class Federator:
             send_ok(sock)  # No.11
             sock.shutdown(2)
             sock.close()
-            print(f"Connection to {sock} closed")
+        print(f"Sockets to Clients closed")
         self.reset()
         self.terminate = True
 

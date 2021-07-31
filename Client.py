@@ -2,6 +2,8 @@ import socket
 import argparse
 from pickle import dumps, loads
 import os
+import shutil
+import functools
 import numpy as np
 import pandas as pd
 from Message import Message
@@ -15,6 +17,8 @@ from GeneralFunc import format_msg
 from Crypto.PublicKey import RSA
 from XCrypt import seg_encrypt, seg_decrypt
 from Loss import *
+from ArgReader import *
+from Decorator import hyper_tune
 
 
 class Client:
@@ -26,6 +30,8 @@ class Client:
         self.path = path
         self.fed_pk = None
         self.dir_name = None
+        self.client_dir = None
+        self.checkpoint_dir = None
         self.sk = RSA.generate(2048)
         self.pk = self.sk.publickey()
         self.metrics = {"avg": 1}  # Initialising average as an aggregation metric
@@ -35,14 +41,6 @@ class Client:
         self.current_round = 1
         self.xcrypt = True
         self.lr = 1
-
-        if not os.path.exists("./tests"):
-            os.mkdir("./tests")
-        if not os.path.exists(f"./tests/{self.dir_name}"):
-            os.mkdir(f"./tests/{self.dir_name}")
-        if not os.path.exists(f"./tests/{self.dir_name}/client{self.client_id}"):
-            os.mkdir(f"./tests/{self.dir_name}/client{self.client_id}")
-        self.client_dir = f"./tests/{self.dir_name}/client{self.client_id}"
 
     def connect(self):
         """
@@ -96,6 +94,46 @@ class Client:
                 break
         return data[:-3]
 
+    def create_self_dir(self):
+        """
+        Create a client's directories
+        :return:
+        """
+        if not os.path.exists("./tests"):
+            os.mkdir("./tests")
+        if not os.path.exists(f"./tests/{self.dir_name}"):
+            os.mkdir(f"./tests/{self.dir_name}")
+        if not os.path.exists(f"./tests/{self.dir_name}/client{self.client_id}"):
+            os.mkdir(f"./tests/{self.dir_name}/client{self.client_id}")
+        self.client_dir = f"./tests/{self.dir_name}/client{self.client_id}"
+        self.checkpoint_dir = os.path.join(self.client_dir, f"checkpoint{self.client_id}")
+        if os.path.exists(self.checkpoint_dir):
+            shutil.rmtree(self.checkpoint_dir)  # Remove previous checkpoint directory and files with same client id
+
+    @hyper_tune
+    def train_epoch(self, train_loader=None, val_loader=None, model=None, optimizer=None, loss_func=None):
+        # Training epochs
+        for n in range(self.epoch_num):  # Training epochs
+            # Mini batches
+            for i, (X, y) in enumerate(train_loader, 0):  # Mini-batches
+                optimizer.zero_grad()  # Reset optimizer parameters
+                loss = 0
+                # A mini batch
+                for j in range(len(X)):  # Calculate on a mini-batch
+                    prediction = model(X[j])
+                    loss += loss_func(prediction[0], y[j], model)
+                loss /= len(X)  # Mean loss to do back prop
+                loss.backward()
+                optimizer.step()  # Update grad and bias for each mini-batch
+        # Cross validation using validation set
+        with torch.no_grad():
+            cv_loss_func = MSELoss()  # Use a separate loss function for cross validation
+            cv_loss = 0
+            for j, (features, target) in enumerate(val_loader, 0):
+                prediction = model(features)
+                cv_loss += float(cv_loss_func(prediction[0], target, model))
+        return model, optimizer, cv_loss
+
     def local_train(self, model, optimizer, loss_func, train_dataset):
         """
         Perform training on local data
@@ -114,34 +152,17 @@ class Client:
         model.train()
         # K-fold cross validation
         for fold, (train_inds, val_inds) in enumerate(kfold.split(train_dataset)):
+            print(f"Fold {fold+1} for Client{self.client_id}")
             self.metrics["cross_val"] = 0
             train_sampler = SubsetRandomSampler(train_inds)
             val_sampler = SubsetRandomSampler(val_inds)
 
             train_loader = DataLoader(train_dataset, batch_size=10, sampler=train_sampler)
             val_loader = DataLoader(train_dataset, batch_size=10, sampler=val_sampler)
-            # Training epochs
-            for n in range(self.epoch_num):  # Training epochs
-                print(f"Epoch {n + 1}/{self.epoch_num}")
-                # Mini batches
-                for i, (X, y) in enumerate(train_loader, 0):  # Mini-batches
-                    optimizer.zero_grad()  # Reset optimizer parameters
-                    loss = 0
-                    # A mini batch
-                    for j in range(len(X)):  # Calculate on a mini-batch
-                        prediction = model(X[j])
-                        loss += loss_func(prediction[0], y[j], model)
-                    loss /= len(X)  # Mean loss to do back prop
-                    loss.backward()
-                    optimizer.step()  # Update grad and bias for each mini-batch
 
-            # Cross validation using validation set
-            with torch.no_grad():
-                cv_loss_func = MSELoss()  # Use a separate loss function for cross validation
-                cv_loss = 0
-                for j, (features, target) in enumerate(val_loader, 0):
-                    prediction = model(features)
-                    cv_loss += float(cv_loss_func(prediction[0], target, model))
+            model, optimizer, cv_loss = self.train_epoch(train_loader=train_loader, val_loader=val_loader, model=model,
+                                                         optimizer=optimizer, loss_func=loss_func)
+
             self.metrics["cross_val"] += cv_loss  # Adding cv as an aggregation metric
         self.metrics["cross_val"] = self.epoch_num / self.metrics["cross_val"]  # cv_score = 1 / (mse / epoch)
         print("Done training")
@@ -309,6 +330,8 @@ class Client:
         self.send(format_msg(dumps(init_msg)))  # init msg 1
         # Receive client_num and explain_ratio
         self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num, self.dir_name, self.lr = loads(self.recv_large())
+        self.create_self_dir()
+
         print(self.client_num, "clients in total.")
         print(f"Want to explain {round(self.explain_ratio * 100, 2)}% of data.")
 
