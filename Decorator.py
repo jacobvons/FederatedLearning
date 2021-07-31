@@ -4,6 +4,11 @@ import os
 
 
 def hyper_tune(func):
+    """
+    Tune hyper parameters of a training function
+    :param func: training function
+    :return:
+    """
     @functools.wraps(func)
     def wrapped(self, *args, **kwargs):
         # config_reader = ArgReader("./hyper_configs.csv")

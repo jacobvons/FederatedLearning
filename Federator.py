@@ -262,10 +262,10 @@ class Federator:
         # Model parameter distribution
         # init_model = LinearRegression(len(avg_pc), 1)
         init_model = MLPRegression(len(avg_pc), 8, 1, 2)
-        optimizer = optim.SGD(init_model.parameters(), lr=0.01)  # TODO: Tune hyper-parameters
-        # loss_func = MSELoss()
-        # loss_func = RidgeLoss()
-        loss_func = LassoLoss(alpha=0.001)
+        optimizer = optim.SGD(init_model.parameters(), lr=0.01, momentum=0.9)  # TODO: Tune hyper-parameters
+        loss_func = MSELoss()
+        # loss_func = RidgeLoss(alpha=0.001)
+        # loss_func = LassoLoss(alpha=0.001)
         print("Average PC Length:", len(avg_pc))
         init_model_msg = format_msg(dumps(Message([init_model, optimizer, loss_func], CommStage.PARAM_DIST)))
         for sock in self.all_sockets:

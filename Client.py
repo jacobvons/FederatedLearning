@@ -111,7 +111,17 @@ class Client:
             shutil.rmtree(self.checkpoint_dir)  # Remove previous checkpoint directory and files with same client id
 
     @hyper_tune
-    def train_epoch(self, train_loader=None, val_loader=None, model=None, optimizer=None, loss_func=None):
+    def train_epochs(self, train_loader=None, val_loader=None, model=None, optimizer=None, loss_func=None):
+        """
+        Train epochs and tune hyperparameters using provided variables
+        Trainable variables: 1.lr; 2.momentum; 3.alpha if LASSO or Ridge loss;
+        :param train_loader: training set loader
+        :param val_loader: validation set loader
+        :param model: model
+        :param optimizer: optimizer
+        :param loss_func: loss function
+        :return: model, optimizer, cv_loss
+        """
         # Training epochs
         for n in range(self.epoch_num):  # Training epochs
             # Mini batches
@@ -160,8 +170,8 @@ class Client:
             train_loader = DataLoader(train_dataset, batch_size=10, sampler=train_sampler)
             val_loader = DataLoader(train_dataset, batch_size=10, sampler=val_sampler)
 
-            model, optimizer, cv_loss = self.train_epoch(train_loader=train_loader, val_loader=val_loader, model=model,
-                                                         optimizer=optimizer, loss_func=loss_func)
+            model, optimizer, cv_loss = self.train_epochs(train_loader=train_loader, val_loader=val_loader, model=model,
+                                                          optimizer=optimizer, loss_func=loss_func)
 
             self.metrics["cross_val"] += cv_loss  # Adding cv as an aggregation metric
         self.metrics["cross_val"] = self.epoch_num / self.metrics["cross_val"]  # cv_score = 1 / (mse / epoch)
