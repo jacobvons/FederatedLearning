@@ -98,6 +98,57 @@ class Client:
 
     def local_train(self, model, optimizer, loss_func, train_dataset):
         """
+        Perform training on local data
+        :param model: model
+        :param optimizer: optimizer
+        :param loss_func: loss function
+        :param train_dataset: local training dataset
+        :return: model and optimizer after training
+        """
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # Training (Local)
+        # Update learning rate (constant, increasing or descending)
+        for g in optimizer.param_groups:
+            g["lr"] = g["lr"] * self.lr
+        kfold = KFold(n_splits=5, shuffle=True)  # TODO: Pass n_splits as a parameter
+        model.train()
+        # K-fold cross validation
+        for fold, (train_inds, val_inds) in enumerate(kfold.split(train_dataset)):
+            self.metrics["cross_val"] = 0
+            train_sampler = SubsetRandomSampler(train_inds)
+            val_sampler = SubsetRandomSampler(val_inds)
+
+            train_loader = DataLoader(train_dataset, batch_size=10, sampler=train_sampler)
+            val_loader = DataLoader(train_dataset, batch_size=10, sampler=val_sampler)
+            # Training epochs
+            for n in range(self.epoch_num):  # Training epochs
+                print(f"Epoch {n + 1}/{self.epoch_num}")
+                # Mini batches
+                for i, (X, y) in enumerate(train_loader, 0):  # Mini-batches
+                    optimizer.zero_grad()  # Reset optimizer parameters
+                    loss = 0
+                    # A mini batch
+                    for j in range(len(X)):  # Calculate on a mini-batch
+                        prediction = model(X[j])
+                        loss += loss_func(prediction[0], y[j], model)
+                    loss /= len(X)  # Mean loss to do back prop
+                    loss.backward()
+                    optimizer.step()  # Update grad and bias for each mini-batch
+
+            # Cross validation using validation set
+            with torch.no_grad():
+                cv_loss_func = MSELoss()  # Use a separate loss function for cross validation
+                cv_loss = 0
+                for j, (features, target) in enumerate(val_loader, 0):
+                    prediction = model(features)
+                    cv_loss += float(cv_loss_func(prediction[0], target, model))
+            self.metrics["cross_val"] += cv_loss  # Adding cv as an aggregation metric
+        self.metrics["cross_val"] = self.epoch_num / self.metrics["cross_val"]  # cv_score = 1 / (mse / epoch)
+        print("Done training")
+        return model, optimizer
+
+    def train_and_report(self, model, optimizer, loss_func, train_dataset):
+        """
         Performs local training with given model and some compulsory communication with host
         :param model: model used for training
         :param optimizer: optimizer
@@ -106,47 +157,8 @@ class Client:
         :return:
         """
         for _ in range(self.comm_rounds):  # Communication rounds
-            # Update learning rate (constant, increasing or descending)
-            for g in optimizer.param_groups:
-                g["lr"] = g["lr"] * self.lr
-            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            # Training (Local)
             print(f"Round {self.current_round}")
-            kfold = KFold(n_splits=5, shuffle=True)  # TODO: Pass n_splits as a parameter
-            model.train()
-            # K-fold cross validation
-            for fold, (train_inds, val_inds) in enumerate(kfold.split(train_dataset)):
-                self.metrics["cross_val"] = 0
-                train_sampler = SubsetRandomSampler(train_inds)
-                val_sampler = SubsetRandomSampler(val_inds)
-
-                train_loader = DataLoader(train_dataset, batch_size=10, sampler=train_sampler)
-                val_loader = DataLoader(train_dataset, batch_size=10, sampler=val_sampler)
-                # Training epochs
-                for n in range(self.epoch_num):  # Training epochs
-                    print(f"Epoch {n+1}/{self.epoch_num}")
-                    # Mini batches
-                    for i, (X, y) in enumerate(train_loader, 0):  # Mini-batches
-                        optimizer.zero_grad()
-                        loss = 0
-                        # A mini batch
-                        for j in range(len(X)):  # Calculate on a mini-batch
-                            prediction = model(X[j])
-                            loss += loss_func(prediction[0], y[j], model)
-                        loss /= len(X)  # Mean loss to do back prop
-                        loss.backward()
-                        optimizer.step()  # Update grad and bias for each mini-batch
-
-                # Cross validation using validation set
-                with torch.no_grad():
-                    cv_loss_func = MSELoss()  # Use a separate loss function for cross validation
-                    cv_loss = 0
-                    for j, (features, target) in enumerate(val_loader, 0):
-                        prediction = model(features)
-                        cv_loss += float(cv_loss_func(prediction[0], target, model))
-                self.metrics["cross_val"] += cv_loss  # Adding cv as an aggregation metric
-            self.metrics["cross_val"] = self.epoch_num / self.metrics["cross_val"]  # cv_score = 1 / (mse / epoch)
-            print("Done training")
+            model, optimizer = self.local_train(model, optimizer, loss_func, train_dataset)
 
             model_grads = []
             model_biases = []
@@ -342,7 +354,7 @@ class Client:
         # Reporting stage
         print(f"{self.comm_rounds} communication rounds in total")
         # Local Training
-        self.local_train(model, optimizer, loss_func, train_dataset)
+        self.train_and_report(model, optimizer, loss_func, train_dataset)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # End stage (single)
