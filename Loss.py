@@ -4,14 +4,15 @@ import torch.nn as nn
 
 class RidgeLoss(nn.Module):
 
-    def __init__(self):
+    def __init__(self, alpha):
         super().__init__()
+        self.alpha = alpha
 
     def forward(self, pred, ground, model):
         mse = nn.MSELoss()
         loss = mse(pred, ground)
         for layer in model.layers:
-            loss += torch.sum(torch.square(layer.weight))
+            loss += self.alpha * torch.sum(torch.square(layer.weight))
         return loss
 
 
