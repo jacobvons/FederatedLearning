@@ -22,6 +22,7 @@ class ArgReader:
                     args[name.strip()] = value.strip()
                 self.args.append(args)
 
+
 class HyperParamGenerator:
 
     def __init__(self, file_path):
@@ -32,7 +33,7 @@ class HyperParamGenerator:
     def read(self):
         with open(self.file_path, "r") as f:
             for line in f:
-                if line.startswith("#"):
+                if line.startswith("#") or line == "\n":
                     continue
                 hp, values = [re.sub(" ", "", i) for i in line.split(":")]
                 values = [float(i) for i in values.split(",")]
