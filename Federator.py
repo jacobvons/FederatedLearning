@@ -260,9 +260,9 @@ class Federator:
         print("Sent average PC")
 
         # Model parameter distribution
-        # init_model = LinearRegression(len(avg_pc), 1)
-        init_model = MLPRegression(len(avg_pc), 8, 1, 2)
-        optimizer = optim.SGD(init_model.parameters(), lr=0.01, momentum=0.9)  # TODO: Tune hyper-parameters
+        init_model = LinearRegression(len(avg_pc), 1)
+        # init_model = MLPRegression(len(avg_pc), 8, 1, 2)
+        optimizer = optim.SGD(init_model.parameters(), lr=0.001, momentum=0.9)  # TODO: Tune hyper-parameters
         loss_func = MSELoss()
         # loss_func = RidgeLoss(alpha=0.001)
         # loss_func = LassoLoss(alpha=0.001)

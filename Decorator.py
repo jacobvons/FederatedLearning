@@ -26,16 +26,16 @@ def hyper_tune(func):
             os.mkdir(self.checkpoint_dir)
         torch.save(base_optimizer.state_dict(), os.path.join(self.checkpoint_dir, "base_opt.pt"))
         torch.save(base_model.state_dict(), os.path.join(self.checkpoint_dir, "base_mod.pt"))
-        for config in hyper_generator.configs:
+        for config_ind, config in enumerate(hyper_generator.configs):
             base_model.load_state_dict(torch.load(os.path.join(self.checkpoint_dir, "base_mod.pt")))
             base_optimizer.load_state_dict(torch.load(os.path.join(self.checkpoint_dir, "base_opt.pt")))
-            # print(base_opt.param_groups[0]["momentum"])
             if "lr" in config.keys():
                 for g in base_optimizer.param_groups:
                     g["lr"] = g["lr"] * config["lr"]
             if "momentum" in config.keys():
                 for g in base_optimizer.param_groups:
                     g["momentum"] = config["momentum"]
+            print(f"Config {config_ind + 1}")
             trained_mod, trained_opt, trained_cv = func(self,
                                                         train_loader=train_loader,
                                                         val_loader=val_loader,

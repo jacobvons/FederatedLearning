@@ -5,6 +5,7 @@ import socket
 from CommStage import CommStage
 from Federator import *
 import torch
+import os
 
 
 def parse_args(args: dict) -> list:
@@ -63,6 +64,7 @@ if __name__ == "__main__":
     fed_args = reader.args
     torch.set_default_dtype(torch.float64)
     for index, arg_dict in enumerate(fed_args):
+        start = time.time()
         fed = create_fed(arg_dict)
         fed_thread = Thread(target=fed_job, args=(fed, ))
         clients_thread = Thread(target=start_clients, args=(arg_dict["p"], ))
@@ -70,3 +72,6 @@ if __name__ == "__main__":
         clients_thread.start()
         fed_thread.join()
         clients_thread.join()
+        end = time.time()
+        with open("./time_records.txt", "a") as f:
+            f.write(f"{arg_dict['name']}: {end-start}\n")

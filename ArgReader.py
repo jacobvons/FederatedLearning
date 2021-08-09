@@ -11,7 +11,7 @@ class ArgReader:
     def parse(self):
         with open(self.path, "r") as f:
             for line in f:
-                if line.startswith("#"):
+                if line.startswith("#") or line == "\n":
                     continue
                 args = {}
                 raw = line.strip().split(",")

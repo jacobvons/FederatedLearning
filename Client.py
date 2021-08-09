@@ -34,7 +34,7 @@ class Client:
         self.checkpoint_dir = None
         self.sk = RSA.generate(2048)
         self.pk = self.sk.publickey()
-        self.metrics = {"avg": 1}  # Initialising average as an aggregation metric
+        self.metrics = {"avg": 1}  # Initialising average as a model aggregation metric
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.client_num = 0
@@ -107,10 +107,12 @@ class Client:
             os.mkdir(f"./tests/{self.dir_name}/client{self.client_id}")
         self.client_dir = f"./tests/{self.dir_name}/client{self.client_id}"
         self.checkpoint_dir = os.path.join(self.client_dir, f"checkpoint{self.client_id}")
+        with open(os.path.join(self.client_dir, "data_path.txt"), "w") as f:
+            f.write(self.path+"\n")
         if os.path.exists(self.checkpoint_dir):
             shutil.rmtree(self.checkpoint_dir)  # Remove previous checkpoint directory and files with same client id
 
-    @hyper_tune
+    # @hyper_tune
     def train_epochs(self, train_loader=None, val_loader=None, model=None, optimizer=None, loss_func=None):
         """
         Train epochs and tune hyperparameters using provided variables
@@ -128,20 +130,17 @@ class Client:
             for i, (X, y) in enumerate(train_loader, 0):  # Mini-batches
                 optimizer.zero_grad()  # Reset optimizer parameters
                 loss = 0
-                # A mini batch
-                for j in range(len(X)):  # Calculate on a mini-batch
-                    prediction = model(X[j])
-                    loss += loss_func(prediction[0], y[j], model)
-                loss /= len(X)  # Mean loss to do back prop
+                prediction = model(X)
+                loss += loss_func(prediction.view(-1), y, model)
                 loss.backward()
                 optimizer.step()  # Update grad and bias for each mini-batch
         # Cross validation using validation set
         with torch.no_grad():
-            cv_loss_func = MSELoss()  # Use a separate loss function for cross validation
+            cv_loss_func = MSELoss()  # TODO: Could change this to another function for cross validation
             cv_loss = 0
             for j, (features, target) in enumerate(val_loader, 0):
                 prediction = model(features)
-                cv_loss += float(cv_loss_func(prediction[0], target, model))
+                cv_loss += float(cv_loss_func(prediction.view(-1), target, model))
         return model, optimizer, cv_loss
 
     def local_train(self, model, optimizer, loss_func, train_dataset):
@@ -167,7 +166,9 @@ class Client:
             train_sampler = SubsetRandomSampler(train_inds)
             val_sampler = SubsetRandomSampler(val_inds)
 
-            train_loader = DataLoader(train_dataset, batch_size=10, sampler=train_sampler)
+            # Changing the batch size
+            train_loader = DataLoader(train_dataset, batch_size=len(train_inds), sampler=train_sampler)
+            # train_loader = DataLoader(train_dataset, batch_size=10, sampler=train_sampler)
             val_loader = DataLoader(train_dataset, batch_size=10, sampler=val_sampler)
 
             model, optimizer, cv_loss = self.train_epochs(train_loader=train_loader, val_loader=val_loader, model=model,
@@ -239,7 +240,7 @@ class Client:
                 with torch.no_grad():
                     layer.weight.data = torch.from_numpy(new_layer_grad)
                     layer.bias.data = torch.from_numpy(new_layer_bias)
-            torch.save(model, os.path.join(self.client_dir, f"client{self.client_id}_model{self.current_round}.pt"))
+            torch.save(model, os.path.join(self.client_dir, f"round{self.current_round:03}_model.pt"))
             print("New model saved.")
             print(f"Round {self.current_round} finished")
             self.current_round += 1
@@ -379,7 +380,7 @@ class Client:
         # Receive initial model stage (single)
         model_msg = self.recv_large()
         model, optimizer, loss_func = loads(model_msg).message
-        torch.save(model, os.path.join(self.client_dir, f"client{self.client_id}_initial_model.pt"))
+        torch.save(model, os.path.join(self.client_dir, f"round000_model.pt"))
         print("Received model message")
         self.send_ok()  # No.6.5
 
