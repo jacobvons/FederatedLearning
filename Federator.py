@@ -18,7 +18,7 @@ import time
 class Federator:
 
     def __init__(self, host, port, client_num, comm_rounds, explain_ratio, xcrypt,
-                 epoch_num, name, pc_agg_method=None, model_agg_method="avg", lr=1):
+                 epoch_num, name, pc_agg_method=None, model_agg_method="avg"):
         """
         Initialise a Federator instance
 
@@ -69,7 +69,6 @@ class Federator:
         self.xcrypt = xcrypt
         self.threads = []
         self.terminate = False
-        self.lr = lr
 
     def reset(self):
         """
@@ -116,7 +115,7 @@ class Federator:
         sock.send(
             format_msg(
                 dumps(
-                    [self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num, self.name, self.lr]
+                    [self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num, self.name]
                 )
             )
         )
@@ -262,9 +261,11 @@ class Federator:
         # Model parameter distribution
         init_model = LinearRegression(len(avg_pc), 1)
         # init_model = MLPRegression(len(avg_pc), 8, 1, 2)
-        optimizer = optim.SGD(init_model.parameters(), lr=0.001, momentum=0.9)  # TODO: Tune hyper-parameters
+        # init_model = MLPRegression(len(avg_pc), 4, 1, 2)
+        # init_model = DNN(len(avg_pc), 4, 1, 3)
+        optimizer = optim.SGD(init_model.parameters(), lr=0.001, momentum=0.9)
         loss_func = MSELoss()
-        # loss_func = RidgeLoss(alpha=0.001)
+        # loss_func = RidgeLoss(alpha=0.01)
         # loss_func = LassoLoss(alpha=0.001)
         print("Average PC Length:", len(avg_pc))
         init_model_msg = format_msg(dumps(Message([init_model, optimizer, loss_func], CommStage.PARAM_DIST)))
@@ -276,7 +277,7 @@ class Federator:
 
     def batch_report(self):
         """
-        Calculates weighted averated model information and send the outcome to clients
+        Calculates weighted averaged model information and send the outcome to clients
 
         :return:
         """
@@ -413,7 +414,6 @@ if __name__ == "__main__":
     parser.add_argument("--name")
     parser.add_argument("--pc_agg")
     parser.add_argument("--mod_agg")
-    parser.add_argument("--lr")
     args = parser.parse_args()
 
     host = args.h

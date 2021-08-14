@@ -40,7 +40,6 @@ class Client:
         self.client_num = 0
         self.current_round = 1
         self.xcrypt = True
-        self.lr = 1
 
     def connect(self):
         """
@@ -90,7 +89,7 @@ class Client:
         while True:
             pack = self.recv(10)
             data += pack
-            if data[-3:] == b"end":
+            if data[-3:] == b"fin":
                 break
         return data[:-3]
 
@@ -154,9 +153,6 @@ class Client:
         """
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Training (Local)
-        # Update learning rate (constant, increasing or descending)
-        for g in optimizer.param_groups:
-            g["lr"] = g["lr"] * self.lr
         kfold = KFold(n_splits=5, shuffle=True)  # TODO: Pass n_splits as a parameter
         model.train()
         # K-fold cross validation
@@ -340,7 +336,7 @@ class Client:
         init_msg = Message(pk_pem, CommStage.CONN_ESTAB)
         self.send(format_msg(dumps(init_msg)))  # init msg 1
         # Receive client_num and explain_ratio
-        self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num, self.dir_name, self.lr = loads(self.recv_large())
+        self.client_num, self.explain_ratio, self.comm_rounds, self.xcrypt, self.epoch_num, self.dir_name = loads(self.recv_large())
         self.create_self_dir()
 
         print(self.client_num, "clients in total.")

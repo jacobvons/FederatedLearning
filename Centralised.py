@@ -21,7 +21,7 @@ class Centralised:
         if not os.path.exists(self.checkpoint_dir):
             os.mkdir(self.checkpoint_dir)
 
-    @hyper_tune
+    # @hyper_tune
     def train_epochs(self, train_loader, val_loader, optimizer, model, loss_func):
         # Training epochs
         for n in range(self.epoch_num):  # Training epochs
@@ -44,7 +44,7 @@ class Centralised:
                 prediction = model(features)
                 cv_loss += float(cv_loss_func(prediction[0], target, model))
         print(f"    lr: {optimizer.param_groups[0]['lr']}; "
-              f"momentum: {optimizer.param_groups[0]['momentum']}"
+              f"momentum: {optimizer.param_groups[0]['momentum']}; "
               f"cv: {cv_loss}")
         return model, optimizer, cv_loss
 
@@ -61,7 +61,6 @@ class Centralised:
             self.comm_rounds = int(args["rounds"])
             self.name = args["name"]
             self.explain_ratio = float(args["ratio"])
-            self.lr = float(args["lr"])
 
             self.checkpoint_dir = os.path.join(self.checkpoint_dir, self.name)
 
@@ -100,14 +99,14 @@ class Centralised:
 
             # Model
             model = MLPRegression(len(pcs), 8, 1, 2)
-            optimizer = optim.SGD(model.parameters(), lr=0.01)
+            optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
             loss_func = MSELoss()
             # loss_func = RidgeLoss(alpha=0.001)
             # loss_func = LassoLoss(alpha=0.001)
 
             for r in range(self.comm_rounds):
-                for g in optimizer.param_groups:
-                    g["lr"] = g["lr"] * self.lr
+                # for g in optimizer.param_groups:
+                #     g["lr"] = g["lr"] * self.lr
                 model.train()
                 kfold = KFold(n_splits=5, shuffle=True)
                 # K-fold cross validation
@@ -120,11 +119,11 @@ class Centralised:
 
                     train_loader = DataLoader(train_dataset, batch_size=10, sampler=train_sampler)
                     val_loader = DataLoader(train_dataset, batch_size=10, sampler=val_sampler)
-                    model, optimizer, cv_loss = self.train_epochs(epoch_num=self.epoch_num, train_loader=train_loader,
+                    model, optimizer, cv_loss = self.train_epochs(train_loader=train_loader,
                                                                   val_loader=val_loader, optimizer=optimizer,
                                                                   model=model, loss_func=loss_func)
                     print(f"Fold {fold+1} best hps: lr: {optimizer.param_groups[0]['lr']}, "
-                          f"momentum: {optimizer.param_groups[0]['momentum']},"
+                          f"momentum: {optimizer.param_groups[0]['momentum']}, "
                           f"cv: {cv_loss}")
                     # Choose the best model according to cross validation score
                     if cv_loss < max_cv:
@@ -133,7 +132,7 @@ class Centralised:
                         print("Updated best model")
                 print(f"Round {r + 1} finished\n")
                 print(f"Best cv score: {max_cv}. Saving best round {r+1} model..")
-                torch.save(best_model, os.path.join(dir_path, f"best_centralised_model_round_{r + 1}.pt"))
+                torch.save(best_model, os.path.join(dir_path, f"best_round_{(r+1):03}_model.pt"))
 
             print("Done training")
         print("Argument set complete")
