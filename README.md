@@ -2,17 +2,12 @@
 ## Acknowledgement
 This is my Honours year (2021) research project on federated learning with my supervisor [Prof Amanda Barnard](https://cs.anu.edu.au/people/amanda-barnard) at the [ANU](https://www.anu.edu.au).
 
-## Background Literatures
-1. [Communication-Efficient Learning of Deep Networks from Decentralized Data](http://proceedings.mlr.press/v54/mcmahan17a/mcmahan17a.pdf)
-2. [Advances and open problems in federated learning](https://arxiv.org/pdf/1912.04977.pdf)
-3. [Federated learning: Challenges, methods, and future directions](https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=9084352)
-4. To be added...
-
 ## Goal
 The goal of this project is to develop a general Python package for federated learning (FL) for tabular data that's compatiple with existing machine learning (ML) packages in Python (currently I'm using PyTorch). I also integreted PCA into the regular FL framework as a means of data preprocessing. 
 
-## Use
-Currently the package is under development and not tested in an actual server environment. However, demonstration of the package in a local environment can be run as follows:
+## To Use
+Currently the package is under development and not tested in an actual server environment. However, demonstration of the package in a local environment can be run in three ways as follows:
+
 ### Use ```StartClients.py```
 - Download the package
   <br>
@@ -76,3 +71,8 @@ Currently the package is under development and not tested in an actual server en
 - After you've downloaded the package and prepared your dataset in the same way above, you can start the Federator using the same command above.
 - Depending on what you input for the ```--n``` parameter, in that many separate terminals, you start clients one at a time using a new terminal using this command: ```python Client.py --h 127.0.0.1 --p 65432 --path path_to_dataset --i client_id```
 - After you've created the expected amount of clients, the process will begin and you should see the same behaviour as before using ```StartClients.py```.
+
+### Use ```autotest.py```
+- ```autotest.py``` is a scripted developed for easy and convenient testing. The mechanism is to automatically generate subprocesses for both the federator and the clients using the ```StartClients.py``` logics. 
+- It also allows users to put sets of parameters into a .csv file so that the program automatically tests on each of them in order. This is convenient for bulk testing. 
+- To use it, first, simply create a .csv file containing the argument sets you want to test. Then, change the testing dataset path in the ```StartClients.py``` file. Finally, run ```python autotest.py``` in your terminal. 
