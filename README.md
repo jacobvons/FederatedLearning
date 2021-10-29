@@ -89,3 +89,9 @@ Currently the package is under development and not tested in an actual server en
 - It also allows users to put sets of parameters into a .csv file so that the program automatically tests on each of them in order. This is convenient for bulk testing. 
 - To use it, first, simply create a .csv file containing the argument sets you want to test. Then, change the testing dataset path in the ```StartClients.py``` file. Finally, run ```python autotest.py``` in your terminal. 
 - Refer to the ```sample_test_args.csv``` file for detailed parameter explanation. 
+
+## Customisation
+- The system supports customisation from several aspects. One can design their own machine learning models, loss functions, and decide which one to use easily. Simply follow the convention in the ```Model.py``` and ```Loss.py``` to customise models for your own usages. 
+- To use them, simply replace the model and loss function in the ```Federator.py``` file. 
+- Currently, model and loss function swithing functionality cannnot be achieved directly through test argument .csv file. This is expected to be implemented in later versions. 
+- As examples, we have implemented several models and loss functions in those two files using PyTorch. 
