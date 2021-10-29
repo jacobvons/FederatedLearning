@@ -5,6 +5,18 @@ This is my Honours year (2021) research project on federated learning with my su
 ## Goal
 The goal of this project is to develop a general Python package for federated learning (FL) for tabular data that's compatiple with existing machine learning (ML) packages in Python (currently I'm using PyTorch). I also integreted PCA into the regular FL framework as a means of data preprocessing. 
 
+## Dataset
+The datasets consist of eight public available synthetic nanoparticle datasets. References to them are listed below:
+- Barnard, Amanda; Opletal, George (2019): Disordered Silver Nanoparticle Data Set. v1. CSIRO. Data Collection. https://doi.org/10.25919/5e30b5231c669
+- Barnard, Amanda; Sun, Baichuan; Motevalli Soumehsaraei, Benyamin; Opletal, George (2017): Silver Nanoparticle Data Set. v3. CSIRO. Data Collection. https://doi.org/10.25919/5d22d20bc543e
+- Barnard, Amanda; Opletal, George (2019): Gold Nanoparticle Data Set. v1. CSIRO. Data Collection. https://doi.org/10.25919/5d395ef9a4291
+- Barnard, Amanda; Opletal, George (2019): Palladium Nanoparticle Data Set. v1. CSIRO. Data Collection. https://doi.org/10.25919/5d3958ee6f239
+- Barnard, Amanda; Sun, Baichuan; Opletal, George (2018): Platinum Nanoparticle Data Set. v2. CSIRO. Data Collection. https://doi.org/10.25919/5d3958d9bf5f7
+
+Brief description of the datasets:
+![Dataset Description](https://github.com/jacobvons/FederatedLearning/blob/main/dataDes.jpg?raw=true)
+
+
 ## To Use
 Currently the package is under development and not tested in an actual server environment. However, demonstration of the package in a local environment can be run in three ways as follows:
 
