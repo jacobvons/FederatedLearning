@@ -76,3 +76,4 @@ Currently the package is under development and not tested in an actual server en
 - ```autotest.py``` is a scripted developed for easy and convenient testing. The mechanism is to automatically generate subprocesses for both the federator and the clients using the ```StartClients.py``` logics. 
 - It also allows users to put sets of parameters into a .csv file so that the program automatically tests on each of them in order. This is convenient for bulk testing. 
 - To use it, first, simply create a .csv file containing the argument sets you want to test. Then, change the testing dataset path in the ```StartClients.py``` file. Finally, run ```python autotest.py``` in your terminal. 
+- Refer to the sample_test_args.csv file for detailed parameter explanation. 
