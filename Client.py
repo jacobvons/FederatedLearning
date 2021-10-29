@@ -89,7 +89,7 @@ class Client:
         while True:
             pack = self.recv(10)
             data += pack
-            if data[-3:] == b"fin":
+            if data[-3:] == b"hwt":
                 break
         return data[:-3]
 
@@ -153,6 +153,8 @@ class Client:
         """
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Training (Local)
+        for g in optimizer.param_groups:
+            g["lr"] = g["lr"] * 0.99
         kfold = KFold(n_splits=5, shuffle=True)  # TODO: Pass n_splits as a parameter
         model.train()
         # K-fold cross validation
@@ -163,8 +165,9 @@ class Client:
             val_sampler = SubsetRandomSampler(val_inds)
 
             # Changing the batch size
-            train_loader = DataLoader(train_dataset, batch_size=len(train_inds), sampler=train_sampler)
-            # train_loader = DataLoader(train_dataset, batch_size=10, sampler=train_sampler)
+            # train_loader = DataLoader(train_dataset, batch_size=len(train_inds), sampler=train_sampler)
+            train_loader = DataLoader(train_dataset, batch_size=10, sampler=train_sampler)  # Default one we use
+            # train_loader = DataLoader(train_dataset, batch_size=20, sampler=train_sampler)
             val_loader = DataLoader(train_dataset, batch_size=10, sampler=val_sampler)
 
             model, optimizer, cv_loss = self.train_epochs(train_loader=train_loader, val_loader=val_loader, model=model,
@@ -236,7 +239,7 @@ class Client:
                 with torch.no_grad():
                     layer.weight.data = torch.from_numpy(new_layer_grad)
                     layer.bias.data = torch.from_numpy(new_layer_bias)
-            torch.save(model, os.path.join(self.client_dir, f"round{self.current_round:03}_model.pt"))
+            torch.save(model, os.path.join(self.client_dir, f"round{self.current_round:05}_model.pt"))
             print("New model saved.")
             print(f"Round {self.current_round} finished")
             self.current_round += 1
@@ -376,7 +379,7 @@ class Client:
         # Receive initial model stage (single)
         model_msg = self.recv_large()
         model, optimizer, loss_func = loads(model_msg).message
-        torch.save(model, os.path.join(self.client_dir, f"round000_model.pt"))
+        torch.save(model, os.path.join(self.client_dir, f"round00000_model.pt"))
         print("Received model message")
         self.send_ok()  # No.6.5
 

@@ -11,6 +11,7 @@ import numpy as np
 from Model import *
 from ArgReader import *
 from Decorator import *
+import time
 
 
 class Centralised:
@@ -37,15 +38,13 @@ class Centralised:
                 loss /= len(X)  # Mean loss to do back prop
                 loss.backward()
                 optimizer.step()  # Update grad and bias for each mini-batch
+
         with torch.no_grad():
             cv_loss_func = MSELoss()  # Use a separate loss function for cross validation
             cv_loss = 0
             for j, (features, target) in enumerate(val_loader, 0):
-                prediction = model(features)
-                cv_loss += float(cv_loss_func(prediction[0], target, model))
-        print(f"    lr: {optimizer.param_groups[0]['lr']}; "
-              f"momentum: {optimizer.param_groups[0]['momentum']}; "
-              f"cv: {cv_loss}")
+                prediction = model(features).view(-1)
+                cv_loss += float(cv_loss_func(prediction, target, model))
         return model, optimizer, cv_loss
 
     def work(self):
@@ -53,10 +52,12 @@ class Centralised:
         torch.set_default_dtype(torch.float64)
 
         # Parameters
-        data_path = "/Users/jacobvons/Downloads/Y4S1/COMP4540/federated_learning/all.csv"
+        # data_path = "/Users/jacobvons/Downloads/Y4S1/COMP4540/federated_learning/all.csv"
+        data_path = "/Users/jacobvons/Downloads/Y4S1/COMP4540/dataset/Pd-lowT.csv"
         reader = ArgReader("./test_args.csv")
         reader.parse()
         for args in reader.args:
+            start = time.time()
             self.epoch_num = int(args["e"])
             self.comm_rounds = int(args["rounds"])
             self.name = args["name"]
@@ -96,9 +97,11 @@ class Centralised:
             train_dataset = TensorDataset(reduced_X_train, y_train)
             test_dataset = TensorDataset(reduced_X_test, y_test)
             torch.save(test_dataset, os.path.join(dir_path, "test_dataset.pt"))
+            torch.save(train_dataset, os.path.join(dir_path, "train_dataset.pt"))
 
             # Model
-            model = MLPRegression(len(pcs), 8, 1, 2)
+            # model = LinearRegression(len(pcs), 1)
+            model = MLPRegression(len(pcs), 4, 1, 2)
             optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
             loss_func = MSELoss()
             # loss_func = RidgeLoss(alpha=0.001)
@@ -106,7 +109,7 @@ class Centralised:
 
             for r in range(self.comm_rounds):
                 # for g in optimizer.param_groups:
-                #     g["lr"] = g["lr"] * self.lr
+                #     g["lr"] = g["lr"] * 0.99
                 model.train()
                 kfold = KFold(n_splits=5, shuffle=True)
                 # K-fold cross validation
@@ -117,24 +120,34 @@ class Centralised:
                     train_sampler = SubsetRandomSampler(train_inds)
                     val_sampler = SubsetRandomSampler(val_inds)
 
-                    train_loader = DataLoader(train_dataset, batch_size=10, sampler=train_sampler)
+                    # train_loader = DataLoader(train_dataset, batch_size=10, sampler=train_sampler)
+                    # train_loader = DataLoader(train_dataset, batch_size=5, sampler=train_sampler)
+                    train_loader = DataLoader(train_dataset, batch_size=len(train_inds), sampler=train_sampler)
                     val_loader = DataLoader(train_dataset, batch_size=10, sampler=val_sampler)
                     model, optimizer, cv_loss = self.train_epochs(train_loader=train_loader,
                                                                   val_loader=val_loader, optimizer=optimizer,
                                                                   model=model, loss_func=loss_func)
-                    print(f"Fold {fold+1} best hps: lr: {optimizer.param_groups[0]['lr']}, "
+                    print(f"    Fold {fold+1} best hps: lr: {optimizer.param_groups[0]['lr']}, "
                           f"momentum: {optimizer.param_groups[0]['momentum']}, "
                           f"cv: {cv_loss}")
+
                     # Choose the best model according to cross validation score
                     if cv_loss < max_cv:
                         max_cv = cv_loss
                         best_model = model
+                        # best_lr = optimizer.param_groups[0]["lr"]
                         print("Updated best model")
                 print(f"Round {r + 1} finished\n")
                 print(f"Best cv score: {max_cv}. Saving best round {r+1} model..")
-                torch.save(best_model, os.path.join(dir_path, f"best_round_{(r+1):03}_model.pt"))
+                torch.save(best_model, os.path.join(dir_path, f"best_round_{(r+1):05}_model.pt"))
+
+                # with open(f"./central/{self.name}/lrs.txt", "a") as f:
+                #     f.write(str(best_lr)+"\n")
 
             print("Done training")
+            end = time.time()
+            with open("./central_time_records.txt", "a") as f:
+                f.write(f"{self.name}: {end-start}\n")
         print("Argument set complete")
 
 

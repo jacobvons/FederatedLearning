@@ -12,7 +12,7 @@ def recv_large(sock):
     while True:
         pack = sock.recv(10)
         data += pack
-        if data[-3:] == b"fin":
+        if data[-3:] == b"hwt":
             break
     return data[:-3]
 
@@ -32,7 +32,7 @@ def format_msg(bytes_msg):
     :param bytes_msg: the bytes message that needs formatting
     :return: bytes message with b"end" at the end
     """
-    return bytes_msg + b"fin"
+    return bytes_msg + b"hwt"
 
 
 def stringify(arr):

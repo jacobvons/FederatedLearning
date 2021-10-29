@@ -259,9 +259,9 @@ class Federator:
         print("Sent average PC")
 
         # Model parameter distribution
-        init_model = LinearRegression(len(avg_pc), 1)
+        # init_model = LinearRegression(len(avg_pc), 1)
         # init_model = MLPRegression(len(avg_pc), 8, 1, 2)
-        # init_model = MLPRegression(len(avg_pc), 4, 1, 2)
+        init_model = MLPRegression(len(avg_pc), 4, 1, 2)
         # init_model = DNN(len(avg_pc), 4, 1, 3)
         optimizer = optim.SGD(init_model.parameters(), lr=0.001, momentum=0.9)
         loss_func = MSELoss()
