@@ -3,7 +3,7 @@
 This is my Honours year (2021) research project on federated learning with my supervisor [Prof Amanda Barnard](https://cs.anu.edu.au/people/amanda-barnard) at the [ANU](https://www.anu.edu.au).
 
 ## Goal
-The goal of this project is to develop a general Python package for federated learning (FL) for tabular data that's compatiple with existing machine learning (ML) packages in Python (currently I'm using PyTorch). I also integreted PCA into the regular FL framework as a means of data preprocessing. 
+The goal of this project is to develop a general Python package for federated learning (FL) for tabular data that's compatiple with existing machine learning (ML) packages in Python (currently using PyTorch). Integreting PCA into the regular FL framework as a means of data preprocessing is also expected. 
 
 ## Dataset
 The datasets consist of eight public available synthetic nanoparticle datasets. References to them are listed below:
@@ -95,3 +95,9 @@ Currently the package is under development and not tested in an actual server en
 - To use them, simply replace the model and loss function in the ```Federator.py``` file. 
 - Currently, model and loss function swithing functionality cannnot be achieved directly through test argument .csv file. This is expected to be implemented in later versions. 
 - As examples, we have implemented several models and loss functions in those two files using PyTorch. 
+
+## Hyperparameter Tuning
+- The system supports hyperparameter tuning mechanism through a Python decorator (```hyper_tune``` implemented in ```Decorator.py```). This decorator is implemented to be compatible with the ```train_epochs``` function in ```Client.py``` and ```Centralised.py```. 
+- To use it, simply put "@hyper_tune" above the definition of the ```train_epochs``` function. 
+- To customise, one could implement functions with same input and output format as the ```train_epochs``` function and use the decorator directly. 
+- The hyperparameter configurations are read through a file users can put in the directory. See ```sample_hyper_config.csv``` for more information. 
