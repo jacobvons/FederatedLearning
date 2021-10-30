@@ -53,6 +53,7 @@ class MLPRegression(nn.Module):
         y = self.linear2(y)
         return y
 
+
 class DNN(nn.Module):
 
     def __init__(self, input_size, hidden_size, target_size, depth):

@@ -1,0 +1,13 @@
+# Similar to testing arguments, a line staring with hash tag (#) is a comment
+
+# Empty lines are ignored
+
+# The hyper parameter tuning is based on grid search currently. So, each combination is going to be tested
+
+# Sample configs for both learning rate and momentum
+
+# lr means the learning rate changing rate, not the actual value, i.e., lr=0.1 means 10 times less than original lr
+lr: 10, 0.1, 1
+
+# momentum is the actual value, i.e., momentum=0.9 is literally momentum=0.9
+momentum: 0.9, 0.85

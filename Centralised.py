@@ -24,6 +24,16 @@ class Centralised:
 
     # @hyper_tune
     def train_epochs(self, train_loader, val_loader, optimizer, model, loss_func):
+        """
+        Performing training for several epochs within a communication round
+
+        :param train_loader: training set loader
+        :param val_loader: validation set loader
+        :param optimizer: optimiser
+        :param model: model
+        :param loss_func: loss function
+        :return:
+        """
         # Training epochs
         for n in range(self.epoch_num):  # Training epochs
             print(f"    Epoch {n + 1}/{self.epoch_num}")
@@ -48,12 +58,16 @@ class Centralised:
         return model, optimizer, cv_loss
 
     def work(self):
+        """
+        Performing the whole process
+
+        :return:
+        """
         # Torch setting
         torch.set_default_dtype(torch.float64)
 
         # Parameters
-        # data_path = "/Users/jacobvons/Downloads/Y4S1/COMP4540/federated_learning/all.csv"
-        data_path = "/Users/jacobvons/Downloads/Y4S1/COMP4540/dataset/Pd-lowT.csv"
+        data_path = "/Users/jacobvons/Downloads/Y4S1/COMP4540/federated_learning/all.csv"
         reader = ArgReader("./test_args.csv")
         reader.parse()
         for args in reader.args:
@@ -108,8 +122,6 @@ class Centralised:
             # loss_func = LassoLoss(alpha=0.001)
 
             for r in range(self.comm_rounds):
-                # for g in optimizer.param_groups:
-                #     g["lr"] = g["lr"] * 0.99
                 model.train()
                 kfold = KFold(n_splits=5, shuffle=True)
                 # K-fold cross validation
@@ -135,14 +147,10 @@ class Centralised:
                     if cv_loss < max_cv:
                         max_cv = cv_loss
                         best_model = model
-                        # best_lr = optimizer.param_groups[0]["lr"]
                         print("Updated best model")
                 print(f"Round {r + 1} finished\n")
                 print(f"Best cv score: {max_cv}. Saving best round {r+1} model..")
                 torch.save(best_model, os.path.join(dir_path, f"best_round_{(r+1):05}_model.pt"))
-
-                # with open(f"./central/{self.name}/lrs.txt", "a") as f:
-                #     f.write(str(best_lr)+"\n")
 
             print("Done training")
             end = time.time()

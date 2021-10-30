@@ -3,6 +3,9 @@ import itertools
 
 
 class ArgReader:
+    """
+    Class used for parsing the testing argument sets
+    """
 
     def __init__(self, file_path: str):
         self.args = []
@@ -24,6 +27,9 @@ class ArgReader:
 
 
 class HyperParamGenerator:
+    """
+    Class used for parsing hyper parameters from the .csv file
+    """
 
     def __init__(self, file_path):
         self.file_path = file_path

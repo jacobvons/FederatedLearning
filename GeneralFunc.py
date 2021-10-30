@@ -27,10 +27,10 @@ def send_ok(sock):
 
 def format_msg(bytes_msg):
     """
-    Formatting a bytes message with a b"end" ending
+    Formatting a bytes message with a b"hwt" ending
 
     :param bytes_msg: the bytes message that needs formatting
-    :return: bytes message with b"end" at the end
+    :return: bytes message with b"hwt" at the end
     """
     return bytes_msg + b"hwt"
 

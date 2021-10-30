@@ -44,6 +44,7 @@ class Client:
     def connect(self):
         """
         Establishes connection to the host
+
         :return:
         """
         self.sock.connect((self.host, self.port))
@@ -52,6 +53,7 @@ class Client:
     def send(self, message):
         """
         Send a message through client socket
+
         :param message: Message got sent
         :return:
         """
@@ -60,6 +62,7 @@ class Client:
     def recv(self, size):
         """
         Receives a bytes from host
+
         :param size: Expected byte size
         :return: bytes of size "size"
         """
@@ -69,6 +72,7 @@ class Client:
     def send_ok(self):
         """
         Sends OK for confirmation
+
         :return:
         """
         self.send(b"OK")
@@ -76,6 +80,7 @@ class Client:
     def recv_ok(self):
         """
         Receives OK from host for confirmation
+
         :return:
         """
         self.recv(2)
@@ -83,6 +88,7 @@ class Client:
     def recv_large(self):
         """
         Receive a "large" piece of Message iteratively until it finishes
+
         :return: the ACTUAL message without b'end'
         """
         data = b""
@@ -116,6 +122,7 @@ class Client:
         """
         Train epochs and tune hyperparameters using provided variables
         Trainable variables: 1.lr; 2.momentum; 3.alpha if LASSO or Ridge loss;
+
         :param train_loader: training set loader
         :param val_loader: validation set loader
         :param model: model
@@ -145,6 +152,7 @@ class Client:
     def local_train(self, model, optimizer, loss_func, train_dataset):
         """
         Perform training on local data
+
         :param model: model
         :param optimizer: optimizer
         :param loss_func: loss function
@@ -181,6 +189,7 @@ class Client:
     def train_and_report(self, model, optimizer, loss_func, train_dataset):
         """
         Performs local training with given model and some compulsory communication with host
+
         :param model: model used for training
         :param optimizer: optimizer
         :param loss_func: loss function
@@ -246,7 +255,8 @@ class Client:
 
     def find_pc_num(self, X_train):
         """
-        Find number of principle components of a given trainig set
+        Find number of principle components of a given training set
+
         :param X_train: training data to be reduced
         :return: number of principle components expected
         """
@@ -264,6 +274,7 @@ class Client:
     def save_original_data(self, X_train, X_test, y_train, y_test):
         """
         Saves the given data to numpy files
+
         :param X_train: training feature data
         :param X_test: testing feature data
         :param y_train: training target data
@@ -280,6 +291,7 @@ class Client:
     def save_reduced_dataset(self, avg_pc, X_train, X_test, y_train, y_test):
         """
         Reduce training data, generate TensorDataset and save them
+
         :param avg_pc: "averaged" principle components used for dimension reduction
         :param X_train: training feature data
         :param X_test: testing feature data
@@ -301,6 +313,7 @@ class Client:
     def dim_reduction(self, X_train):
         """
         Perform dimension reduction and do some compulsory communication with host
+
         :param X_train: training feature data
         :return: pcs: principle components and the final explain ratio
         """
@@ -331,6 +344,7 @@ class Client:
     def work(self):
         """
         Client working pipeline
+
         :return:
         """
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

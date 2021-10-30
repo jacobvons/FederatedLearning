@@ -9,6 +9,7 @@ def hyper_tune(func):
     """
     Tune hyper parameters of a training function
     HPs to tune: 1.lr; 2.momentum; 3.alpha if LASSO or Ridge loss;
+
     :param func: training function
     :return:
     """

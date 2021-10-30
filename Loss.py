@@ -3,6 +3,9 @@ import torch.nn as nn
 
 
 class RidgeLoss(nn.Module):
+    """
+    Ridge loss: MSE based, with L1 regularisation
+    """
 
     def __init__(self, alpha):
         super().__init__()
@@ -17,6 +20,9 @@ class RidgeLoss(nn.Module):
 
 
 class MSELoss(nn.MSELoss):
+    """
+    MSE loss: Mean Squared Loss
+    """
 
     def __init__(self):
         super().__init__()
@@ -26,6 +32,9 @@ class MSELoss(nn.MSELoss):
 
 
 class LassoLoss(nn.Module):
+    """
+    Lasso loss: MSE based, with L2 regularisation
+    """
 
     def __init__(self, alpha):
         super().__init__()

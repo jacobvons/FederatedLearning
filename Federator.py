@@ -238,15 +238,14 @@ class Federator:
         # Weighted PC aggregation methods
         if not self.pc_agg_method or self.pc_agg_method == "avg":
             print("using avg")
-            # avg_pc = sum(self.pcs) / len(self.pcs)
             avg_pc = sum(self.pcs.values()) / len(self.pcs)
         elif self.pc_agg_method == "exp_ratio":
             print("using explain ratio")
-            avg_pc = sum([self.pcs[s] * self.client_ratios[s] for s in self.pcs.keys()]) / sum(self.client_ratios.values())
+            avg_pc = sum([self.pcs[s] * self.client_ratios[s] for s in self.pcs.keys()]) \
+                     / sum(self.client_ratios.values())
         elif self.pc_agg_method == "size":
             print("using dataset size")
             avg_pc = sum([self.pcs[s] * self.sizes[s] for s in self.pcs.keys()]) / sum(self.sizes.values())
-        # TODO: Add more PC aggregation methods here
         else:  # If typo or any other situations, use average by default
             print("using default avg due to typo")
             avg_pc = sum(self.pcs.values()) / len(self.pcs)
@@ -295,7 +294,8 @@ class Federator:
             if self.model_agg_method in self.model_agg_metrics.keys():
                 metric_score = self.model_agg_metrics[sock][self.model_agg_method]
             else:
-                metric_score = self.model_agg_metrics[sock][self.model_agg_method]  # By default use averaging in case of a typo
+                # By default use averaging in case of a typo
+                metric_score = self.model_agg_metrics[sock][self.model_agg_method]
 
             # Calculating grad and biases with weights (metric_score/metric_sum)
             weight = metric_score / metric_sum

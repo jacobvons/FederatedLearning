@@ -9,6 +9,12 @@ import os
 
 
 def parse_args(args: dict) -> list:
+    """
+    Converting the argument dictionary into a list to read from
+
+    :param args: argument dictionary
+    :return: parsed list of arguments
+    """
     parsed = []
     for k, v in args.items():
         parsed.append("--"+str(k))
@@ -17,6 +23,12 @@ def parse_args(args: dict) -> list:
 
 
 def create_fed(args: dict):
+    """
+    Creating a Federator object according to argument sets
+
+    :param args: argument dictionary
+    :return:
+    """
     fed = Federator(host=args["h"],
                     port=int(args["p"]),
                     client_num=int(args["n"]),
@@ -31,6 +43,12 @@ def create_fed(args: dict):
 
 
 def fed_job(fed):
+    """
+    Defining a job for federator to start
+
+    :param fed: the Federator object
+    :return:
+    """
     while True:
         if len(fed.all_sockets) < fed.client_num and fed.state == CommStage.CONN_ESTAB:  # Collecting client connections
             fed.sock.settimeout(0.00001)  # 0.00001s timeout for "refreshing"
@@ -54,6 +72,12 @@ def fed_job(fed):
 
 
 def start_clients(port):
+    """
+    Creating a subprocess for the clients to run
+
+    :param port: port the federator host listens on
+    :return:
+    """
     subprocess.call(["python", "StartClients.py", "--p", str(port)])
 
 
