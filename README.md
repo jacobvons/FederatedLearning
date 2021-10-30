@@ -3,7 +3,9 @@
 This is my Honours year (2021) research project on federated learning with my supervisor [Prof Amanda Barnard](https://cs.anu.edu.au/people/amanda-barnard) at the [ANU](https://www.anu.edu.au).
 
 ## Goal
-The goal of this project is to develop a general Python package for federated learning (FL) for tabular data that's compatiple with existing machine learning (ML) packages in Python (currently using PyTorch). Integreting PCA into the regular FL framework as a means of data preprocessing is also expected. 
+- To develop a general Python package for federated learning (FL) for tabular data that's compatiple with existing machine learning (ML) packages in Python (currently using PyTorch). 
+- Integreting PCA into the regular FL framework as a means of data preprocessing.
+- Exploring different aggregation metrics for PCs and model parameters. 
 
 ## Dataset
 The datasets consist of eight public available synthetic nanoparticle datasets. References to them are listed below:
