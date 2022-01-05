@@ -37,6 +37,7 @@ class Federator:
         self.name = name
         self.sk = RSA.generate(2048)
         self.pk = self.sk.publickey()
+        self.start = time.time()
         while True:
             try:
                 self.sock.bind((host, port))
@@ -280,6 +281,11 @@ class Federator:
 
         :return:
         """
+        with open(f"./tests/{self.name}/time_record.txt", "a") as f:
+            f.write(f"{self.name}: {time.time() - self.start}, "
+                    f"ratio: {self.explain_ratio}, "
+                    f"rounds: {self.comm_rounds}, "
+                    f"epoch: {self.epoch_num}\n")
         self.reset_conns()
         print("All clients reported.")
         # Aggregation and distribution
@@ -329,6 +335,11 @@ class Federator:
 
         :return:
         """
+        with open("./time_records.txt", "a") as f:
+            f.write(f"{self.name}: {time.time() - self.start}, "
+                    f"ratio: {self.explain_ratio}, "
+                    f"rounds: {self.comm_rounds}, "
+                    f"epoch: {self.epoch_num}\n")
         self.reset_conns()
         for sock in self.all_sockets:
             send_ok(sock)  # No.11

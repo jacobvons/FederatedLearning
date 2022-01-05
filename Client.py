@@ -253,13 +253,15 @@ class Client:
             print(f"Round {self.current_round} finished")
             self.current_round += 1
 
-    def find_pc_num(self, X_train):
+    def find_pc_num(self, X_train, exp_ratio):
         """
         Find number of principle components of a given training set
 
         :param X_train: training data to be reduced
         :return: number of principle components expected
         """
+        if exp_ratio == 1:  # If wish to use the original data without dimension reduction
+            return X_train.shape[1]
         pca = PCA(n_components=5)
         while True:
             pca.fit(X_train)
@@ -317,7 +319,7 @@ class Client:
         :param X_train: training feature data
         :return: pcs: principle components and the final explain ratio
         """
-        pc_num = self.find_pc_num(X_train)
+        pc_num = self.find_pc_num(X_train, self.explain_ratio)
         self.send_ok()  # No.1
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Conn establish (batch)
