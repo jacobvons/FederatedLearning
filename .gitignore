@@ -165,3 +165,6 @@ fabric.properties
 
 # CSV
 *.csv
+
+# PDF FILES (targeting thesis)
+*.pdf
