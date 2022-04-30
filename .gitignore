@@ -168,3 +168,6 @@ fabric.properties
 
 # PDF FILES (targeting thesis)
 *.pdf
+
+# gadi job files
+/job_files/
