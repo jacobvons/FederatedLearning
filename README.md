@@ -2,6 +2,10 @@
 ## Acknowledgement
 This is my Honours year (2021) research project on federated learning with my supervisor [Prof Amanda Barnard](https://cs.anu.edu.au/people/amanda-barnard) at the [ANU](https://www.anu.edu.au).
 
+## Publishment
+https://iopscience.iop.org/article/10.1088/2632-2153/aca87c/meta
+DOI: 10.1088/2632-2153/aca87c
+
 ## Goal
 - To develop a general Python package for federated learning (FL) for tabular data that's compatiple with existing machine learning (ML) packages in Python (currently using PyTorch). 
 - Integreting PCA into the regular FL framework as a means of data preprocessing.
