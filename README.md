@@ -3,7 +3,7 @@
 This is my Honours year (2021) research project on federated learning with my supervisor [Prof Amanda Barnard](https://cs.anu.edu.au/people/amanda-barnard) at the [ANU](https://www.anu.edu.au).
 
 ## Publishment
-https://iopscience.iop.org/article/10.1088/2632-2153/aca87c/meta
+https://iopscience.iop.org/article/10.1088/2632-2153/aca87c/meta <br>
 DOI: 10.1088/2632-2153/aca87c
 
 ## Goal
