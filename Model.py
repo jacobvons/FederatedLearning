@@ -81,3 +81,16 @@ class DNN(nn.Module):
         y = self.relu2(y)
         y = self.linear3(y)
         return y
+
+class MLPClassifier(nn.Module):
+    def __init__(self, input_size, hidden_size, target_size):
+        super().__init__()
+        self.linear1 = nn.Linear(input_size, hidden_size)
+        self.sigmoid = nn.Sigmoid()
+        self.linear2 = nn.Linear(hidden_size, target_size)
+        self.layers = [self.linear1, self.linear2]
+
+    def forward(self, x):
+        x = self.sigmoid(self.linear1(x))
+        x = self.linear2(x)
+        return x

@@ -31,6 +31,17 @@ class MSELoss(nn.MSELoss):
         return super().forward(input, target)
 
 
+class CrossEntropyLoss(nn.CrossEntropyLoss):
+    """
+    Cross Entropy Loss
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input, target, model):
+        return super().forward(input, target)
+
 class LassoLoss(nn.Module):
     """
     Lasso loss: MSE based, with L2 regularisation

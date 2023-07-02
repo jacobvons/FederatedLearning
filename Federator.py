@@ -261,10 +261,12 @@ class Federator:
         # Model parameter distribution
         # init_model = LinearRegression(len(avg_pc), 1)
         # init_model = MLPRegression(len(avg_pc), 8, 1, 2)
-        init_model = MLPRegression(len(avg_pc), 4, 1, 2)
+        # init_model = MLPRegression(len(avg_pc), 4, 1, 2)
+        init_model = MLPClassifier(len(avg_pc), 16, 1)
         # init_model = DNN(len(avg_pc), 4, 1, 3)
         optimizer = optim.SGD(init_model.parameters(), lr=0.001, momentum=0.9)
-        loss_func = MSELoss()
+        # loss_func = MSELoss()
+        loss_func = CrossEntropyLoss()
         # loss_func = RidgeLoss(alpha=0.01)
         # loss_func = LassoLoss(alpha=0.001)
         print("Average PC Length:", len(avg_pc))
@@ -300,7 +302,7 @@ class Federator:
             if self.model_agg_method in self.model_agg_metrics.keys():
                 metric_score = self.model_agg_metrics[sock][self.model_agg_method]
             else:
-                # By default use averaging in case of a typo
+                # By default, use averaging in case of a typo
                 metric_score = self.model_agg_metrics[sock][self.model_agg_method]
 
             # Calculating grad and biases with weights (metric_score/metric_sum)

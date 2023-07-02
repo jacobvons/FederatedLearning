@@ -137,7 +137,7 @@ class Client:
                 optimizer.zero_grad()  # Reset optimizer parameters
                 loss = 0
                 prediction = model(X)
-                loss += loss_func(prediction.view(-1), y, model)
+                loss += loss_func(prediction.view(-1), y.float(), model)
                 loss.backward()
                 optimizer.step()  # Update grad and bias for each mini-batch
         # Cross validation using validation set
@@ -255,14 +255,14 @@ class Client:
 
     def find_pc_num(self, X_train, exp_ratio):
         """
-        Find number of principle components of a given training set
+        Find number of principal components of a given training set
 
         :param X_train: training data to be reduced
-        :return: number of principle components expected
+        :return: number of principal components expected
         """
         if exp_ratio == 1:  # If wish to use the original data without dimension reduction
             return X_train.shape[1]
-        pca = PCA(n_components=5)
+        pca = PCA(n_components=29)
         while True:
             pca.fit(X_train)
             if sum(pca.explained_variance_ratio_) >= self.explain_ratio:
@@ -294,7 +294,7 @@ class Client:
         """
         Reduce training data, generate TensorDataset and save them
 
-        :param avg_pc: "averaged" principle components used for dimension reduction
+        :param avg_pc: "averaged" principal components used for dimension reduction
         :param X_train: training feature data
         :param X_test: testing feature data
         :param y_train: training target data
@@ -317,7 +317,7 @@ class Client:
         Perform dimension reduction and do some compulsory communication with host
 
         :param X_train: training feature data
-        :return: pcs: principle components and the final explain ratio
+        :return: pcs: principal components and the final explain ratio
         """
         pc_num = self.find_pc_num(X_train, self.explain_ratio)
         self.send_ok()  # No.1
@@ -340,7 +340,7 @@ class Client:
         # Perform PCA (Local)
         pca = PCA(n_components=final_pc_num)
         pca.fit(X_train)
-        pcs = (pca.components_, sum(pca.explained_variance_ratio_))  # principle components and explain ratio sum
+        pcs = (pca.components_, sum(pca.explained_variance_ratio_))  # principal components and explain ratio sum
         return pcs
 
     def work(self):
